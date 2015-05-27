@@ -1,0 +1,29 @@
+Description: Enable hardened build flags
+Origin: vendor, http://bugs.debian.org/cgi-bin/bugreport.cgi?msg=5;filename=l2tpns-harden.patch;att=1;bug=657846
+Bug-Debian: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=657846
+Author: Moritz Muehlenhoff <jmm@debian.org>
+
+diff -aur l2tpns-2.1.21.harden/Makefile l2tpns-2.1.21/Makefile
+--- l2tpns-2.1.21.harden/Makefile	2005-12-07 06:21:37.000000000 +0100
++++ l2tpns-2.1.21/Makefile	2012-01-29 12:14:37.000000000 +0100
+@@ -10,16 +10,14 @@
+ DEFINES += -DLIBDIR='"$(libdir)"'
+ DEFINES += -DETCDIR='"$(etcdir)"'
+ 
+-OPTIM =
+-OPTIM += -g
+-OPTIM += -O3
++DEB_CFLAGS_MAINT_APPEND=-Wall -O3 -Wno-format-zero-length
+ 
+ CC = gcc
+ LD = gcc
+ INCLUDES = -I.
+-CPPFLAGS = $(INCLUDES) $(DEFINES)
+-CFLAGS = -Wall -Wformat-security -Wno-format-zero-length $(OPTIM)
+-LDFLAGS =
++CPPFLAGS = `dpkg-buildflags --get CPPFLAGS` $(INCLUDES) $(DEFINES)
++CFLAGS = `dpkg-buildflags --get CFLAGS`
++LDFLAGS = `dpkg-buildflags --get LDFLAGS`
+ LDLIBS =
+ INSTALL = install -c -D -o root -g root
+ 

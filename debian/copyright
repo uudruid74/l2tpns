@@ -1,0 +1,25 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: l2tpns
+Upstream-Contact: Brendan O'Dea <bod@c47.org>
+Source: https://github.com/bodea/l2tpns
+License: GPL+
+ You are free to distribute this software under the terms of the GNU
+ General Public License. The full text of this license can be found
+ in the file /usr/share/common-licenses/GPL
+
+Files: *
+Copyright: 2002 FireBrick (Andrews & Arnold Ltd / Watchfront Ltd)
+           2002 Adrian Kennard
+           2003, 2004, 2005, 2006 Optus Internet Engineering
+           2003 David Parrish <david@dparrish.com>
+           2004 Brendan O'Dea <bod@optus.net>
+License: GPL+
+ You are free to distribute this software under the terms of the GNU
+ General Public License. The full text of this license can be found
+ in the file /usr/share/common-licenses/GPL
+
+Files: md5.*
+Copyright: 2001 Solar Designer <solar@openwall.com>
+License: public-domain
+ Written by Solar Designer <solar at openwall.com> in 2001, and placed
+ in the public domain.  There's absolutely no warranty.

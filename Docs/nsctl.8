@@ -1,0 +1,69 @@
+.\" -*- nroff -*-
+.de Id
+.ds Dt \\$4 \\$5
+..
+.Id $Id: nsctl.8,v 1.2 2004-11-17 15:08:19 bodea Exp $
+.TH NSCTL 8 "\*(Dt" L2TPNS "System Management Commands"
+.SH NAME
+nsctl \- manage running l2tpns instance
+.SH SYNOPSIS
+.B nsctl
+.RB [ \-d ]
+.RB [ \-h
+.IR host [: port ]]
+.RB [ \-t
+.IR timeout ]
+.I command
+.RI [ arg " ...]"
+.SH DESCRIPTION
+.B nsctl
+sends commands to a running
+.B l2tpns
+process.  It provides both for the loading or unloading of plugins and
+also the management of sessions via functions provided by those plugins.
+.SH OPTIONS
+.TP
+.B \-d
+Enable debugging output.
+.TP
+.B \-h \fIhost\fR[:\fIport\fR]
+The host running
+.B l2tpns
+that should receive the message.  By default the message is sent to
+UDP port 1702 on
+.BR localhost .
+.TP
+.B \-t \fItimeout\fR
+Timeout in seconds to wait for a response from the server.
+.SH COMMANDS
+The first argument specifies the command to send to
+.B l2tpns .
+The following commands are as defined:
+.TP
+.BI "load_plugin " plugin
+Load the named
+.IR plugin .
+.TP
+.BI "unload_plugin " plugin
+Unload the named
+.IR plugin .
+.TP
+.B help
+Each loaded plugin is queried for what commands it supports and the
+synopsis for each is output.
+.PP
+Any other value of
+.I command
+(and
+.I args
+if any)
+are sent to
+.B l2tpns
+as-is, to be passed to each plugin which registers a
+.B plugin_control
+function in turn (in which it may be acted upon).
+.SH SEE ALSO
+.BR l2tpns (8)
+.SH AUTHOR
+This manual page was written by Jonathan McDowell <noodles@the.earth.li>,
+for the Debian GNU/Linux system (but may be used by others).

@@ -1,0 +1,136 @@
+# Debugging level
+set debug 3
+
+# Log file: comment out to use stderr, use "syslog:facility" for syslog
+set log_file "/var/log/l2tpns"
+
+# Write pid to this file
+set pid_file "/var/run/l2tpns.pid"
+
+# Shared secret with LAC
+set l2tp_secret "secret"
+
+# MTU of interface for L2TP traffic
+#set l2tp_mtu 1500
+
+# PPP counter and timer values
+#set ppp_restart_time 3
+#set ppp_max_configure 10
+#set ppp_max_failure 5
+
+# Only 2 DNS server entries are allowed
+set primary_dns 10.0.0.1
+set secondary_dns 10.0.0.2
+
+# Can have multiple radius server entries, but ony one radius secret
+set primary_radius 10.0.0.3
+#set primary_radius_port 1645
+#set secondary_radius 0.0.0.0
+#set secondary_radius_port 1645
+set radius_secret "secret"
+
+# Acceptable authentication types (pap, chap) in order of preference
+#set radius_authtypes "pap"
+
+# Turn on or off Radius Accounting
+#set radius_accounting no
+
+# Port for DAE RADIUS requests
+#set radius_dae_port 3799
+
+# Allow multiple logins for the same username
+#set allow_duplicate_users no
+
+# Kill timedout sessions ? (default yes)
+#set kill_timedout_sessions no
+
+# Allow multiple logins for specific username
+#set guest_account ""
+
+# Write usage accounting files into specified directory
+set accounting_dir "/var/run/l2tpns/acct"
+
+# Listen address for L2TP
+#set bind_address 1.1.1.1
+
+# Send a gratiuitous ARP for bind address
+#set send_garp no
+
+# Gateway address given to clients
+#set peer_address 0.0.0.0
+
+# Default throttle rate in kb/s
+#set throttle_speed 0
+
+# Number of buckets to allocate for throttling
+#set throttle_buckets 3000
+
+# If set to anything other than 0, setuid when initialised.
+#set setuid 0
+
+# If set to true, dump current speed to stderr every second
+#set dump_speed no
+
+# Number of packets to read from tun/udp/cluster fd when select
+# returns readable
+#set multi_read_count 10
+
+# Set scheduling priority of process to SCHED_FIFO
+#set scheduler_fifo no
+
+# Lock pages into memory
+#set lock_pages no
+
+# Maximum number of host unreachable packets to send per second
+#set icmp_rate 0
+
+# Maximum number of downstream packets per 0.1s to handle for each
+# session (0 = ulimited)
+#set packet_limit 0
+
+# Cluster multicast address, interface
+#set cluster_address 239.192.13.13
+#set cluster_interface eth0
+
+# Cluster multicast TTL
+#set cluster_mcast_ttl 1
+
+# Cluster timers (1/10th second)
+#set cluster_hb_interval 5
+#set cluster_hb_timeout 150
+
+# Minimum number of slaves before master withdraws routes
+#set cluster_master_min_adv 1
+
+# IPv6 address prefix
+#set ipv6_prefix ::
+
+# Drop/kill sessions
+#load plugin "sessionctl"
+
+# Throttle/snoop based on RADIUS
+#load plugin "autothrottle"
+#load plugin "autosnoop"
+
+# Control throttle/snoop with nsctl
+#load plugin "throttlectl"
+#load plugin "snoopctl"
+
+# Punt RX speed if not supplied
+#load plugin "setrxspeed"
+
+# Remove domain from username
+#load plugin "stripdomain"
+
+# Walled garden
+#load plugin "garden"
+
+# Edit the calling station ID to remove 61 and add 0
+#load plugin "editcsid"
+
+# Set the username to be the calling station ID
+#load plugin "clitousername"
+
+# Append "@test.realm" to the username
+#load plugin "appendrealm"
+#set append_realm "test.realm"

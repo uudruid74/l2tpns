@@ -1,0 +1,22 @@
+Description: Fix syslog.h requirement for NULL / compilation with GCC 4.8
+Bug-Debian: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=707385
+Author: Jonathan McDowell <noodles@earth.li>
+
+--- a/l2tpns.c	2013-06-04 13:53:46.000000000 -0700
++++ b/l2tpns.c	2013-06-04 13:54:10.000000000 -0700
+@@ -10,6 +10,7 @@
+ #include <fcntl.h>
+ #include <linux/if_tun.h>
+ #define SYSLOG_NAMES
++#include <stdio.h>
+ #include <syslog.h>
+ #include <malloc.h>
+ #include <math.h>
+@@ -20,7 +21,6 @@
+ #include <netinet/ip6.h>
+ #include <stdarg.h>
+ #include <stdlib.h>
+-#include <stdio.h>
+ #include <string.h>
+ #include <ctype.h>
+ #include <sys/ioctl.h>

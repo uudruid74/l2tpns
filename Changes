@@ -1,0 +1,511 @@
+* Sun Sep 11 2011 Brendan O'Dea <bod@optus.net> 2.2.x
+- Apply MLPPP patch from Muhammad Tayseer Alquoatli.
+- Apply patch from Michael O to avoid sending multiple CDNs.
+- Apply patch from Cyril Elkaim to fix an issue with MacOS.
+- Apply patch from Geoffrey D. Bennett to fix retry of control packets.
+- Apply patch from Geoffrey D. Bennett to handle RADIUS Class attribute.
+- Bump heartbeat version to handle Class entry in session (v6).
+- Re-arrange session struct to remove padding.
+- Update cluster code to handle v6 packets.  Drop compatability for pre-v5.
+- Clean up some compiler errors.
+
+* Mon Dec 18 2006 Brendan O'Dea <bod@optus.net> 2.1.22
+- Don't send interim records before session start (Daryl Tester)
+- Add "shutdown" and "reload" CLI commands (Daryl Tester)
+* Thu Jan 20 2011 Brendan O'Dea <bod@optus.net> 2.2.x
+
+
+* Fri Dec 1 2006 Brendan O'Dea <bod@optus.net> 2.1.21
+- Security: Rhys Kidd identified a vulnerability in the handling of
+  heartbeat packets.  Drop oversize heartbeat packets.
+
+* Thu Aug 3 2006 Brendan O'Dea <bod@optus.net> 2.1.20
+- Fix sign problem with reporting of unknown VSAs.
+- Allow DNS servers to be specified either using the old or new
+  vendor-specific Ascend formats.
+
+* Fri Jun 23 2006 Brendan O'Dea <bod@optus.net> 2.1.19
+* Mon Dec 18 2006 Brendan O'Dea <bod@optus.net> 2.2.0
+- Only poll clifd if successfully bound.
+- Add "Practical VPNs" document from Liran Tal as Docs/vpn .
+- Add Multilink support from Khaled Al Hamwi.
+- Remove non-working setuid option.
+- Convert manual.html to Docbook.
+- Kludge around problem with Netgear DM602 authentication.
+- Add session/idle timeouts (Graham Maltby).
+- Use result code AVP to set Acct-Terminate-Cause is disconnect cause
+  AVP is not present.
+- Add radius_bind_{min,max} to simplify firewalling of RADIUS ports.
+- Fix sign problem with reporting of unknown RADIUS VSAs.
+- Allow DNS servers to be specified either using the old or new
+  vendor-specific Ascend formats.
+- Security [CVE-2006-5873]: Rhys Kidd identified a vulnerability in the
+  handling of heartbeat packets.  Drop oversize heartbeat packets.
+- Don't send interim records before session start (Daryl Tester).
+- Add "shutdown" and "reload" CLI commands (Daryl Tester).
+
+* Tue Apr 18 2006 Brendan O'Dea <bod@optus.net> 2.1.18
+- Don't shutdown on TerminateReq, wait for CDN.
+- Interpret "local" direction correctly (as LAC) in disconnect AVPs.
+
+* Thu Apr 13 2006 Brendan O'Dea <bod@optus.net> 2.1.17
+- Fix IPCP length test to allow Terminate-Request (4 bytes).
+- Send nsctl responses back using the correct source address (thanks ltd).
+- Similarly set the source for DAE responses; use bind_address when
+  handling forwarded packets on the master.
+- Add Acct-Terminate-Cause to RADIUS stop records.
+
+* Thu Feb 23 2006 Brendan O'Dea <bod@optus.net> 2.1.16
+- Send configured magic-no in LCP EchoReq when LCP is opened.
+- Correct addition of single IP to pool (Jonathan Yarden).
+- Ensure session changes from LCP ConfigReq/ConfigNak are sent to cluster.
+- Verify that RADIUS packets come from a configured server (Jonathan Yarden).
+- Avoid endless loop in processipcp, processipv6cp.
+- Additional length checks in processlcp.
+- Allow peer to request a new magic-number, or to disable magic-numbers.
+- Decrease ip_conntrack_tcp_timeout_established to 5hrs (table filling).
+
+* Mon Dec 19 2005 Brendan O'Dea <bod@optus.net> 2.1.15
+- Drop backtrace.
+- Reduce logging of LCP EchoReply packets.
+- Break LCP configure loop with shutdown.
+- Limit value of MRU of 1492 (rfc2516).
+- Tun MTU should be MRU (not MRU+4).
+- Add Service-Type/Framed-Protocol to RADIUS records (Paul Martin).
+
+* Fri Dec 9 2005 Brendan O'Dea <bod@optus.net> 2.1.14
+- Run PLUGIN_RADIUS_ACCOUNT for Start records.
+
+* Wed Dec 7 2005 Brendan O'Dea <bod@optus.net> 2.1.13
+- Add test/ping-sweep.
+- Apply spec changes from Charlie Brady: use License header, change
+  BuildRoot to include username.
+- Fix IPCP negotiation of secondary DNS server, reported by Jon Morby.
+- Clean up sessiont, removing some unused fields.
+- Remove unused "MAC" config type.
+- Reject unknown/unconfigured protocols on the master.
+- Sanity check MRU before using in ppp_code_rej, protoreject.
+
+* Thu Nov 17 2005 Brendan O'Dea <bod@optus.net> 2.1.12
+- Set MTU on tunnel interface so the kernel will re-fragment large
+  packets to within MRU.
+- Fix TCP checksum recalc.
+- NAK silly MRU values from peer.
+
+* Mon Nov 14 2005 Brendan O'Dea <bod@optus.net> 2.1.11
+- Fix fragment handling in ip_filter.
+- Exclude counter when comparing filter rules.
+
+* Sat Nov 5 2005 Brendan O'Dea <bod@optus.net> 2.1.10
+- Add scripts/l2tpns-capture.
+- Fix LCP Echo frequency.
+- Add Framed-Route entries to RADIUS records.
+- Reset restart counters correctly.
+- Reset timers on sending ConfigReq.
+- Only send one RADIUS Start record, even if IPCP is restarted.
+
+* Tue Oct 11 2005 Brendan O'Dea <bod@optus.net> 2.1.9
+- Fix Calling-Station-Id in RADIUS accounting records (Slobodan Tomic).
+- Fix RADIUS authentication on DAE responses.
+- Don't send tunnel HELLO when there are pending control messages.
+- Move plugin_radius_reset from *ctl to auto* plugins.
+- Add Cisco-AVPairs to RADIUS accounting records via plugin_radius_account.
+
+* Mon Sep 19 2005 Brendan O'Dea <bod@optus.net> 2.1.8
+- Move code from signal handlers into mainloop, avoiding a race
+  condition when forking CLI.
+
+* Fri Sep 16 2005 Brendan O'Dea <bod@optus.net> 2.1.7
+- This time, for sure: really fix Protocol-Reject.
+
+* Fri Sep 16 2005 Brendan O'Dea <bod@optus.net> 2.1.6
+- Any traffic on a tunnel resets lastrec, not just control messages.
+- Use a unique identifier for LCP.
+- Fix Code-Reject/Protocol-Reject.
+- Add l2tp_mtu configuration option, used to define MRU, MSS.
+- Adjust TCP MSS options in SYN and SYN,ACK packets to avoid
+  fragmentation of tcp packets.
+
+* Sat Sep 3 2005 Brendan O'Dea <bod@optus.net> 2.1.5
+- Avoid Code-Reject loop.
+- Increase size of PPP buffers to MAXETHER.
+- Bug fixes for CLI ringbuffer and tunnel HELLO from Yuri.
+- Restart rather than halt BGP on receipt of CEASE (Dominique Rousseau).
+- Add cluster_mcast_ttl option to allow a cluster to span multiple
+  subnets (suggested by Tim Devries).
+
+* Mon Aug 29 2005 Brendan O'Dea <bod@optus.net> 2.1.4
+- Drop level of "Unexpected CHAP message" log.
+- Fix parsing of ProtocolRej (allow 1 or two byte protocols).
+- Handle rejection of MRU negotiation by peer.
+- Use local hostname for tunnel in SCCRP (Alex Kiernan).
+
+* Wed Aug 17 2005 Brendan O'Dea <bod@optus.net> 2.1.3
+- Fail IPCP negotiation only on ConfigRej of IP-Address.
+
+* Wed Aug 10 2005 Brendan O'Dea <bod@optus.net> 2.1.2
+- Clear cluster_master on election so that slaves will accept a new master.
+- Provide more comments/defaults in etc/startup-config.default.
+- Add DAE support (PoD/CoA) from Vladislav Bjelic.
+- Clean up new warnings from gcc 4.0.
+- Replace flags used for LCP/IPCP with state machine.
+- Include Acct-Session-Time in interim records.
+- Fix DAE vector, generateload (Alex Kiernan).
+- Replace RSA MD5 with public domain version.
+
+* Tue Jun 14 2005 Brendan O'Dea <bod@optusnet.com.au> 2.1.1
+- Add missing newline to backtrace macro.
+- Don't send CDN for each session when shutting down tunnels (this is
+  implicit).
+- Move tunnel shutdown from SIGQUIT signal handler to be run once from
+  still_busy().  Reject new tunnels/sessions while in the process of
+  shutting down.
+- Clarify usage of shutdown signals in documentation.
+- Always initialise PRNG.
+- Sanity check length of random_vector.
+- Fix segv in unhide_value.
+- Ping new master when we get C_MASTER and delay next election to allow
+  the unicast limp-along code to kick in if required.
+
+* Sun Jun 5 2005 Brendan O'Dea <bod@optusnet.com.au> 2.1.0
+- Add IPv6 support from Jonathan McDowell.
+- Add CHAP support from Jordan Hrycaj.
+- Add interim accounting support from Vladislav Bjelic.
+- Negotiate MRU, default 1458 to avoid fragmentation.
+- Sanity check that cluster_send_session is not called from a child
+  process.
+- Use bounds-checking lookup functions for string constants.
+- Add enum for RADIUS codes.
+- Make "call_" prefix implict in CSTAT() macro.
+- Fix some format string problems.
+- Remove "save_state" option.  Not maintained anymore; use clustering
+  to retain state across restarts.
+- Simplify AVP unhiding code.
+- Add optional "username" parameter to ungarden control, allowing the
+  username to be reset before going online.
+- Add result/error codes and message to StopCCN when shutting down tunnels.
+- Add result/error codes to CDN when shutting down sessions.  Sends 2/7
+  (general error, try another LNS) when out of IP addresses, and 3
+  (adminstrative) for everything else (suggestion from Chris Gates).
+- Use cli_error() for error messages and help.
+- Don't use LOG() macro in initdata() until the config struct has been
+  allocated (uses config->debug).
+- Initialise log_stream to stderr to catch errors before the config file
+  is read.
+- Make "show running-config" a privileged command (contains clear text
+  shared secrets).
+- Add sessionctl plugin to provide drop/kill via nsctl.
+- New config option: allow_duplicate_users which determines whether
+  or not to kill older sessions with the same username.
+- Fix byte counters in accounting records.
+- Add Acct-Output-Gigawords, Acct-Input-Gigawords attributes to RADIUS
+  accounting packets.
+- Fix icmp host unreachable to use router address.
+- Include endpoint address in accounting dump files.
+- Convert mainloop to use epoll rather than select.
+- Add note about fragmentation in Docs/manual.html, and a sample
+  iptables rule for MSS clamping.
+- Merge 2.0.22:
+  + Show session open time in "show session"/"show user" detailed output.
+  + Have slaves with BGP configured drop BGP on receipt of a shutdown
+    signal, but hang about for an additional 5s to process any remaining
+    traffic.
+  + Run regular_cleanups after processing the results of the select,
+    looking at a sufficient slice of each table to ensure that all
+    entries are examined at least once per second.
+- Merge 2.0.21:
+  + Cluster changes from Michael, intended to prevent a stray master
+    from trashing a cluster:
+    = Ignore heartbeats from peers claiming to be the master before the
+      timeout on the old master has expired.
+    = A master receiving a stray heartbeat sends a unicast HB back, which
+      should cause the rogue to die due to the tie-breaker code.
+    = Keep probing the master for late heartbeats.
+    = Drop BGP as soon as we become master with the minumum required peers.
+    = Any PING seen from a master forces an election (rather than just
+      where basetime is zero).
+    = A slave which receives a LASTSEEN message (presumably a restarted
+      master) sends back new message type, C_MASTER which indicates the
+      address of the current master.
+  + New config option: cluster_master_min_adv which determines the minimum
+    number of up to date slaves required before the master will drop
+    routes.
+- Merge 2.0.20:
+  + Add handling of "throttle=N" RADIUS attributes.
+  + Fix RADIUS indexing (should have 16K entries with 64 sockets).
+- Merge 2.0.19:
+  + Fix leak in session freelist when initial RADIUS session allocation
+    fails.
+- Merge 2.0.18:
+  + Add a Cisco-Avpair with intercept details to RADIUS Start/Stop
+    records.
+- Merge 2.0.17:
+  + Only send RADIUS stop record in sessionshutdown when there's an ip address.
+  + Reset .die on master takeover (so that dying sessions don't have to
+    hang around until the new master has the same uptime as the old one).
+  + Update .last_packet in cluster_handle_bytes only when there have
+    been bytes received from the modem (dead sessions were having the
+    idle timeout reset by stray packets).
+- Merge 2.0.16:
+  + Ensure that sessionkill is not called on an unopened session (borks
+    the freelist).
+  + Bump MAXSESSION to 60K.
+  + Fix off-by-one errors in session/tunnel initialisation and
+    sessiont <-> sessionidt functions.
+  + Use session[s].opened consistently when checking for in-use sessions
+    (rather than session[s].tunnel).
+  + Use <= cluster_highest_sessionid rather than < MAXSESSION in a
+    couple of loops.
+  + Don't kill a whole tunnel if we're out of sessions.
+  + Change session[s].ip to 0 if set from RADIUS to 255.255.255.254;
+    avoids the possibility that it will be interpreted as a valid IP
+    address.
+  + Avoid a possible buffer overflow in processpap.
+  + Kill session if authentication was rejected.
+- Merge 2.0.15:
+  + More DoS prevention:  add packet_limit option to apply a hard limit
+    to downstream packets per session.
+  + Fix "clear counters".
+  + Log "Accepted connection to CLI" at 4 when connection is from localhost
+    to reduce noise in logs.
+  + Show time since last counter reset in "show counters".
+- Merge 2.0.14:
+  + Throttle outgoing LASTSEEN packets to at most one per second for a
+    given seq#.
+
+* Fri Dec 17 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.13
+- Better cluster master collision resolution: keep a counter of state
+  changes, propagated in the heartbeats; the master with the highest #
+  of changes (that has kept in contact with the LAC through the
+  outage) prevails.
+- Skip newlines in ringbuffer messages to CLI.
+- Drop "Session N is closing" message level to 4; don't process PPPIP
+  packets in this state.
+- Use gzip --best for man pages, include pid_file in sample
+  startup-config (from Jonathan's Debian package patches).
+- Read multiple packets off cluster_sockfd as well as udpfd, tunfd in an
+  attempt to avoid losing the cluster in high load (DoS) conditions.
+- Add counters for select_called, multi_read_used and multi_read_exceeded.
+- Compress logs.
+- Retain counters of shutdown sessions to dump once per minute.
+- Use standard uintN_t types for portability.
+
+* Wed Dec 1 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.12
+- The "This time, for sure!" release.
+- Fix throttlectl plugin argument parsing.
+
+* Wed Dec 1 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.11
+- Don't send a RADIUS start record when ungardening on shutdown.
+
+* Wed Dec 1 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.10
+- Fix byte ordering of LCP header length (thanks Yuri).
+- Increase ip_conntrack_max due to dropped packets.
+
+* Tue Nov 30 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.9
+- Revise CCP, send ConfigReq once only.
+- Don't copy the old buffer into Config{Nak,Rej} LCP responses (oops);
+  add length checks when appending.
+- Do copy the identifier from the request and update length.
+- Have makeppp print a backtrace on overflow.
+- Check control serial before clearing window, prevents looping tunnel
+  setup in some instances.
+- Implement named access-lists which may be applied to a session
+  either via Filter-Id RADIUS responses, or using the CLI.
+- Drop ip address from LOG.
+- autothrottle: revise parsing; ignore lcp:interface-config avpairs
+  which don't start with serv[ice-policy].
+- Add THANKS file.
+
+* Sat Nov 20 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.8
+- Ignore gateway address in Framed-Route (from Jonathan McDowell).
+- Don't route Framed-IP-Address if contained in a Framed-Route.
+- Call sessionshutdown() when a tunnel is dropped rather than
+  sessionkill() to ensure that RADIUS stop records are sent.
+- Cleanup: make a bunch of global functions/variables static.
+- Remove reference to old -a command line argument.
+- Add l2tpns(8) and nsctl(8) manpages from Jonathan McDowell.
+- Add startup-config(5) manpage.
+- Revise nsctl to allow arbitrary strings/args to be passed to plugins.
+- Add snoopctl, throttlectl plugins.
+- Fix deletion from linked list.
+- Allow LCP re-negotiation after connection completes (thanks Yuri).
+
+* Mon Nov 15 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.7
+- Fix socket creation in host_unreachable() (thanks to Bjørn Augestad)
+- Don't assume BGP peer sends back negotiated hold time, pick smallest
+
+* Thu Nov 11 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.6
+- Make BGP keepalive/hold time configurable
+- Revise BGP config to use "router bgp AS" syntax (requires libcli >= 1.8.2)
+
+* Tue Nov 9 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.5
+- Handle routing properly in lone-master case 
+- Fix intercepts:  don't double-snoop throttled customers, ensure
+  byte/packet counts are only updated once
+- Add a callback to allow plugins to fetch values from the running config
+
+* Mon Nov 8 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.4
+- Added setrxspeed plugin
+- Added peer_address config option
+- Rename wrapper macros to LOG()/LOG_HEX(), use p->log() in plugins
+- Replace some PPP{PAP,CHAP} magic numebrs with constants
+- Nak asyncmap (unless == 0)
+- Bundle ConfigRej options
+- Clean up initlcp handling
+
+* Wed Nov 3 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.3
+- Added support for hidden AVPs by Robert Clark
+- l2tpns-chap-response.patch from Robert Clark
+- Merge l2tpns-config-hostname.patch from Robert Clark
+- l2tpns-dont-timeshift-unidirectional-traffic.patch from Robert Clark - Dump accounting data if cin OR cout is non-zero
+- Don't write accounting files if no accounting dir is set - Yuri
+- Fix checking for mmap success
+- Renegotiate MRU - Yuri
+- Take LCP ConfigReq length from the packet length field - Yuri
+- Hostname set via command line not config
+- Make number of throttle buckets configurable
+- Shared_malloc returns NULL on failure
+- Sync changes
+- Unfsck 4->8 indenting change
+- Use 2 seperate u16 values for throttle rate in/out
+- Defer adding radius fds to the select loop until become_master
+
+* Thu Sep 02 2004 David Parrish <david@dparrish.com> 2.0.2
+- Combined LCP patches from Iain and Yuri. This should allow Windows 2k/XP
+  clients to connect, as well Linksys DSL modems.
+- Apply patch to fix -v option from Juergen Kammer.
+- Makefile fix from Juergen Kammer to not overwrite existing config files on
+  make install
+- Configurable radius port patch from Juergen Kammer.
+- Send my_address if no bind_address when doing IPCP
+- Write pid file if filename is set
+- Add startup script and monitor script from Yuri
+- Some logging correctness fixes from Iain Wade
+- Add support for LCP Ident and CallBack (rejection only) from Yuri
+- Initiate LCP if not attempted by the client, or in renegotiation - Yuri
+- Indentation and style cleanups
+- Per-user upload and download throttle rates - Yuri
+- Make autothrottle.so understand cisco lcp:interface-config - Yuri
+- Show filter stats in show session - Yuri
+- Cleanup from Michael to change sid to unique_id
+- Add plugin to remove domain name from auth requests
+- Add .spec file for RPM generation
+
+* Tue Jul 13 2004 Brendan O'Dea <bod@optusnet.com.au> 2.0.1
+- Update INSTALL, Docs/manual.html documentation.
+- Add INTERNALS documentation.
+- Add lock_pages option.
+- TerminateAck fix from Yuri
+- Adject cli_loop args for libcli 1.8.0
+- Allow for backward compatabity in C_PING packets
+- Don't send RADIUS stop messages from sessionshutdown when called from
+  sessionkill.
+- s/tap/tun/ .
+- Fix for LASTSEEN breakage:  don't do anything in the CLI other than
+  flag changes to be made by the parent.
+- Split out master parts from cluster_check_master() into cluster_check_slaves().
+- Set hostname in CLI prompt.
+- Make cluster_hb_interval work; include interval/timeout in heartbeats
+  so that a change on the master is propagated immediately to the slaves.
+- Use fast heartbeats when there are slaves not up to date.
+- Ensure basetime of shut down master is set to zero (prevent delayed election).
+- Fix radius session leak on IPCP timeout.
+- Fix some off-by-one errors in tunnel/session loops.
+- Add "limp along" fix for when a slave drops temporarily from the mcast group.
+- Rename l2tpns.cfg as startup-config to match CONFIGFILE.
+- Update cli callbacks to work with libcli 1.6.
+  This supports privileged and unprivileged commands, as well as a configuration
+  mode.
+- Add help for all cli commands.
+- Add "show version" command.
+- Fix uptime counter display.
+- Fix nasty bug where cluster basetime can be set to 0 when sending initial
+  heartbeat.
+- Don't rmmod ip_conntrack, as this can take a lot of time.
+- Re-order logging in routeset such that the action is given before any error.
+- Use the correct gateway address when deleting routes.
+- Remove any routes when address changes.
+- Require authentication if telnet from remote ip.
+- Require enable password always.
+- Return error if show pool done on slave.
+- We MUST immediately exit if we're the wrong master!
+
+* Wed Jun 23 2004 David Parrish <david@dparrish.com> 2.0.0
+- Major release
+- Completely replace active/standby clustering with a new peer-to-peer
+  clustering method which allows much greater throughput and is a lot more fault
+  tolerant
+- Add internal tbf implementation for throttling without relying on tc and
+  kernel HTB
+- Add support for iBGP and eBGP to advertise routes
+- Add cli commands "show cluster", "show bgp", "show ipcache", "show throttle",
+  "show tbf", "suspend bgp", "restart bgp", "show user"
+- Interception destination must be set per-user
+- If SMP machine, allow use of SCHED_FIFO, which should improve performance
+- Added config option to send GARP at startup
+- Added plugin_become_master and plugin_new_session_master plugin hooks
+- Remove useless sessionsendarp(). This isn't needed now that we are using TUN
+  instead of TAP.
+- ICMP rate limiting so not every unreachable packet is replied with an ICMP
+  unreachable message
+- mangle table is not required on anything but the cluster master, so slaves
+  will drop the mangle table and attempt to unload the ip_conntrack module
+- Statically assigned IP addresses (by Radius) work now
+- Add -d command-line flag to detach and become a daemon
+- Configuration file is now "/etc/l2tpns/startup-config"
+- Reduced MIN_IP_SIZE to 0x19 to stop a pile of Short IP warnings
+- Resend initial IPCP request until it's acknowleged by the client
+- Better radius session cleanup logic
+- Many miscellaenous bugfixes and performance enhancements
+- Thanks to Michael O'Reilly and Brendan O'Dea for most of these new features
+
+* Mon May 24 2004 David Parrish <david@dparrish.com> 1.2.0
+- Fix SEGFAULT in garden module
+- Use multiple radius sockets to allow more concurrent authentication requests
+- Add username parameter to "show users" command
+- Fix counting tunnel rx errors as tunnel tx errors
+- Add "show throttle" command
+- Add gcc __attribute__ to logging functions
+- Fix warnings shown by __attribute__
+- Make sure regular cleanup happens regularly under high load
+- Add variable cleanup_interval for changing cleanup interval
+- Add support for reading more than one packet per fd in each processing loop
+- This is configurable with the multi_read_count variable
+- Remove segv handler so core dumps can happen
+- Use nonblocking sockets
+- Increase tun queue length
+- Fix minimum length of IP packets
+- Remove per-packet plugin hooks (they are slow)
+- Don't drop session if no free RADIUS
+- Don't expire more than 1000 sessions per cleanup interval
+- Remove -a and -c command-line options. They don't work anyway
+- Don't require file: in log_filename
+- Bump version to 1.2.0
+- Check return code when throttling users
+
+* Mon Apr 5 2004 David Parrish <david@dparrish.com> 1.1.1
+- Don't mention configure anymore, it's not used
+- Added the autosnoop and autothrottle modules
+- Don't default to using a htb for the class root
+
+* Fri Mar 5 2004 David Parrish <david@dparrish.com> 1.1.0
+- Change all strcpy() calls to strncpy() to avoid buffer overflow potential
+- Add ICMP host unreachable support
+- Logging to syslog if log_file = "syslog:facility"
+- Now requires libcli 1.5
+- All configuration moves to a config structure
+- Ability to modify and write config on the fly through command-line interface
+- Config file support is removed, and now handled by the cli
+- Show hostname in cli prompt
+- Keep current state type for tunnels
+- Add uptime command do CLI, which also shows real-time bandwidth utilisation
+- Add goodbye command to cluster master, which forces droppping a slave
+- Cache IP address allocation, so that reconnecting users get the same address
+- Fix tunnel resend timeouts, so that dead tunnels will be cleaned up
+- Allocate tunnels and radius without using a linked list which had issues
+- Fix some off-by-one errors in tunnel and session and radius arrays
+- Save and reload ip address pool when dieing
+- Check version and size of reloaded data when restarting
+- Remove plugin_config support
+- Remove old support for TBF which didn't work anyway. HTB is required to do throttling now.
+- Add COPYING and Changes files

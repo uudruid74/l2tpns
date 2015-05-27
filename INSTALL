@@ -1,0 +1,74 @@
+Brief Installation guide for L2TPNS
+
+1. Requirements
+
+  * libcli 1.8.5 or greater
+    You can get it from http://sourceforge.net/projects/libcli.
+
+  * A kernel with iptables support.
+
+
+2. Compile
+
+  * make
+
+
+3. Install
+
+  * make install.  This process:
+    - Installs the binaries into /usr/sbin (l2tpns and nsctl).
+    - Creates the config dir /etc/l2tpns installs default config files.
+    - Ensures that /dev/net/tun exists.
+
+  * Modify config file.  You probably need to change most of the config
+    options.
+
+  * Set up basic firewall rules.  The l2tpns process listens on a bunch of
+    ports:
+
+	23/tcp		command line interface
+	1701/udp	l2tp (on bind_address)
+	1702/udp	control port (nsctl)
+	3799/udp	RADIUS DAE port
+	32792/udp	clustering messages
+
+  * If you are using the garden plugin, setup the walled garden firewall
+    rules.  These should be in /etc/l2tpns/build-garden, which is run by the
+    plugin after creating/flushing the "garden" nat table.
+
+	iptables -t nat -A garden -p tcp -m tcp --dport 25 -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p udp -m udp --dport 53 -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p tcp -m tcp --dport 53 -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p tcp -m tcp --dport 80 -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p tcp -m tcp --dport 110 -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p tcp -m tcp --dport 443 -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p icmp -m icmp --icmp-type echo-request -j DNAT --to 192.168.1.1
+	iptables -t nat -A garden -p icmp -j ACCEPT
+	iptables -t nat -A garden -j DROP
+
+  * Set up IP address pools in /etc/l2tpns/ip_pool
+
+  * Set up routing.
+    - If you are running a single instance, you can simply statically route
+      the IP pools to the bind_address (l2tpns will send a gratuitous arp).
+
+    - For a cluster, configure the members as BGP neighbours on your router
+      and configure multi-path load-balancing (on Cisco use "maximum-paths").
+
+  * Make l2tpns run on startup.  In a clustered environment running from
+    inittab is recomended:
+
+	l2tp:2345:respawn:/home/l2tpns/src/l2tpns >/dev/null 2>&1
+
+  * Test it out.
+
+
+
+This software is quite stable and is being used in a production environment at
+a quite large ISP.  However, you may have problems setting it up, and if so, I
+would appreciate it if you would file useful bug reports on the Source Forge
+page:
+
+http://sourceforge.net/projects/l2tpns/
+
+-- David Parrish
