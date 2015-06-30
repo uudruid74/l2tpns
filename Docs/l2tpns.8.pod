@@ -1,0 +1,151 @@
+=pod
+
+=head1 NAME
+
+l2tpns - Layer 2 tunneling protocol network server (LNS)
+
+=head1 SYNOPSIS
+
+B<l2tpns> [-B<d>] [-B<v>] [-B<c> I<file>] [-B<h> I<hostname>]
+
+=head1 DESCRIPTION
+
+B<l2tpns> is a daemon for terminating layer 2 tunneling protocol (L2TP: RFC2661) sessions.
+
+B<l2tpns> is a complete L2TP implementation. It supports the LAC, LNS, PPPOE and DHCPv6 server.
+
+Once running, B<l2tpns> may be controlled by telnetting to port 23 on the machine running the daemon and with the B<nsctl> utility.
+
+=head1 OPTIONS
+
+=over
+
+=item B<-d>	Detach from terminal and fork into the background. By default l2tpns will stay in the foreground.
+
+.
+
+=item B<-v>	Increase verbosity for debugging. Can be used multiple times.
+
+.
+
+=item B<-c> I<file>
+
+Specify configuration file.
+
+=item B<-h> I<hostname>
+
+Force hostname to I<hostname>.
+
+=back
+
+=head1 FILES
+
+=over
+
+=item I</etc/l2tpns/startup-config>
+
+The default configuration file.
+
+=item I</etc/l2tpns/ip_pool>
+
+IP address pool configuration.
+
+=item I</etc/l2tpns/users>
+
+Username/password configuration for access to admin interface.
+
+=back
+
+=head1 SIGNALS
+
+=over
+
+=item B<SIGHUP> Reload the config from disk and re-open log file.
+
+.
+
+=item B<SIGTERM>, B<SIGINT>
+
+Stop process. Tunnels and sessions are not terminated. This signal should be used to stop l2tpns on a cluster node where there are other machines to continue handling traffic.
+
+=item B<SIGQUIT>
+
+Shut down tunnels and sessions, exit process when complete.
+
+=back
+
+=head1 MANAGED RADIUS ATTRIBUTE
+
+=over
+
+=item B<Ascend-Client-Primary-DNS>, B<Ascend-Client-Secondary-DNS>
+
+Specifies a primary and secondary DNS server address to send to user.
+
+=item B<Delegated-IPv6-Prefix>
+
+Assign a network address IPv6 prefix to a user by DHCPv6.
+ 
+=item B<Framed-IP-Address>
+
+The address to be configured for the user (IPv4 address of the interface ppp).
+
+=item B<Framed-Route>
+
+provides routing information to be configured for the user.
+
+=item B<Framed-IPv6-Route>
+
+Has the same action as B<Delegated-IPv6-Prefix>. B<Delegated-IPv6-Prefix> is the correct one to use.
+
+=item B<Framed-IPv6-Address>
+
+IPv6 address to be assigned to the user by DHCPv6 (IPv6 address of the interface ppp).
+
+=item B<Idle-Timeout>
+
+disconnects the session if no data for more than B<Idle-Timeout> (in seconds).
+
+=item B<Session-Timeout>
+
+disconnects the user session when the time B<Session-Timeout> is reached (in seconds).
+
+=item B<Tunnel-Type>, B<Tunnel-Medium-Type>, B<Tunnel-Server-Endpoint>, B<Tunnel-Password>, B<Tunnel-Assignment-Id>
+
+attributes returned by the Radius of the remote LNS server (LAC functionality).
+
+example, Radius that return the information of 2 remote LNS server with which must be open a L2TP TUNNEL:
+
+=over
+
+=item	B<Tunnel-Type>: 1 = L2TP
+
+=item	B<Tunnel-Medium-Type>: 1 = IPv4
+
+=item	B<Tunnel-Password>: 1 = "TheSecretL2TP"
+
+=item	B<Tunnel-Server-Endpoint>: 1 = "88.xx.xx.x1"
+
+=item	B<Tunnel-Assignment-Id>: 1 = "friendisp_lns1"
+
+=item	B<Tunnel-Type>: 2 = L2TP
+
+=item	B<Tunnel-Medium-Type>: 2 = IPv4
+
+=item	B<Tunnel-Password>: 2 = "TheSecretL2TP"
+
+=item	B<Tunnel-Server-Endpoint>: 2 = "88.xx.xx.x2"
+
+=item	B<Tunnel-Assignment-Id>: 2 = "friendisp_lns2"
+
+=back
+
+=back
+
+=head1 SEE ALSO
+
+B<startup-config>(5), B<nsctl>(8)
+
+=head1 AUTHOR
+
+This manual page was written by Jonathan McDowell <noodles@earth.li> and Fernando Alves (fendo@sameswifi.fr), for the Debian GNU/Linux system (but may be used by others).
