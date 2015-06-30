@@ -238,7 +238,7 @@ void clean_shutdown();
 void print_report();
 
 int ns = 0, nr = 0;
-int udpfd;
+int udpfd; // FIXME: Can I get rid of this?  - EKL
 int t = 0;
 struct sockaddr_in gatewayaddr = {0};
 int numsessions = NUM_SESSIONS;

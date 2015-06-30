@@ -1,4 +1,6 @@
 #include <string.h>
+#include <netinet/ip6.h>
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "plugin.h"
 #include "control.h"

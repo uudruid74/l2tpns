@@ -8,6 +8,7 @@
 #include <netdb.h>
 #include <signal.h>
 
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "control.h"
 

@@ -1,3 +1,18 @@
+* 2015 Evan Langlois <uudruid74@gmail.com> 2.2.22
+- Massive merges from other forks
+- Version number bump to indicate version is newer than other forks.
+- Support for multiple radius pools (partially based on other works)
+- Sanity checks and tweaks to make compiler happy, buffer overflow fixes
+- Support for maximum number of sessions
+- Show current config values in terminal interface
+
+* 2012 Fernando Alves <fernando.alves@sameswireless.fr> 2.2.1-2fdn x
+- Fix MLPPP functionality.
+- Fix the inverted "delete/add" of the routes, in cluster mode.
+- Add a echo_timeout configuration option.
+- Add a idle_echo_timeout configuration option.
+- Add LAC functionality, possibility to forward ppp to Remote LNS.
+
 * Sun Sep 11 2011 Brendan O'Dea <bod@optus.net> 2.2.x
 - Apply MLPPP patch from Muhammad Tayseer Alquoatli.
 - Apply patch from Michael O to avoid sending multiple CDNs.

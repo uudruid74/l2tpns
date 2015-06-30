@@ -1,13 +1,13 @@
 // L2TPNS: arp
 
-char const *cvs_id_arp = "$Id: arp.c,v 1.7 2005-07-31 10:04:09 bodea Exp $";
-
 #include <string.h>
 #include <unistd.h>
 #include <net/ethernet.h>
 #include <net/if_arp.h>
 #include <linux/if_packet.h>
+#include <netinet/ip6.h>
 
+#include "dhcp6.h"
 #include "l2tpns.h"
 
 /* Most of this code is based on keepalived:vrrp_arp.c */

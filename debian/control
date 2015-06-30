@@ -16,5 +16,5 @@ Description: layer 2 tunnelling protocol network server (LNS)
  limiting, walled garden, usage accounting, and clustering (for both
  load-sharing and redundancy).
  .
- Note that only the LNS side of the L2TP protocol is implemented, for
- a more complete L2TP implementation see the l2tpd package.
+ l2tpns is a complete L2TP implementation. It supports the LAC, LNS,
+ PPPOE and DHCPv6 server.

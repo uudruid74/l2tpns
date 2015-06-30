@@ -10,8 +10,6 @@
  *   nor RFC2385 (which requires a kernel patch on 2.4 kernels).
  */
 
-char const *cvs_id_bgp = "$Id: bgp.c,v 1.12.6.1 2010-05-21 01:37:47 perlboy84 Exp $";
-
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -23,17 +21,21 @@ char const *cvs_id_bgp = "$Id: bgp.c,v 1.12.6.1 2010-05-21 01:37:47 perlboy84 Ex
 #include <netdb.h>
 #include <fcntl.h>
 
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "bgp.h"
 #include "util.h"
 
 static void bgp_clear(struct bgp_peer *peer);
 static void bgp_set_retry(struct bgp_peer *peer);
-static void bgp_cidr(in_addr_t ip, in_addr_t mask, struct bgp_ip_prefix *pfx);
 static struct bgp_route_list *bgp_insert_route(struct bgp_route_list *head,
     struct bgp_route_list *new);
+static struct bgp_route6_list *bgp_insert_route6(struct bgp_route6_list *head,
+    struct bgp_route6_list *new);
 
+static void bgp_process_timers(struct bgp_peer *peer);
 static void bgp_free_routes(struct bgp_route_list *routes);
+static void bgp_free_routes6(struct bgp_route6_list *routes);
 static char const *bgp_msg_type_str(uint8_t type);
 static int bgp_connect(struct bgp_peer *peer);
 static int bgp_handle_connect(struct bgp_peer *peer);
@@ -43,13 +45,15 @@ static int bgp_handle_input(struct bgp_peer *peer);
 static int bgp_send_open(struct bgp_peer *peer);
 static int bgp_send_keepalive(struct bgp_peer *peer);
 static int bgp_send_update(struct bgp_peer *peer);
+static int bgp_send_update6(struct bgp_peer *peer);
 static int bgp_send_notification(struct bgp_peer *peer, uint8_t code,
     uint8_t subcode);
-static int compare_bgp_ip_prefixes(const void *a, const void *b);
+
 static uint16_t our_as;
+static struct bgp_route_list *bgp_routes = 0;
+static struct bgp_route6_list *bgp_routes6 = 0;
 
 int bgp_configured = 0;
-struct bgp_ip_prefix *bgp_routes = 0;
 struct bgp_peer *bgp_peers = 0;
 
 /* prepare peer structure, globals */
@@ -88,6 +92,7 @@ int bgp_setup(int as)
     	return 0;
 
     bgp_routes = 0;
+    bgp_routes6 = 0;
     bgp_configured = 0; /* set by bgp_start */
 
     return 1;
@@ -95,7 +100,7 @@ int bgp_setup(int as)
 
 /* start connection with a peer */
 int bgp_start(struct bgp_peer *peer, char *name, int as, int keepalive,
-    int hold, int enable)
+    int hold, struct in_addr update_source, int enable)
 {
     struct hostent *h;
     int ibgp;
@@ -124,6 +129,7 @@ int bgp_start(struct bgp_peer *peer, char *name, int as, int keepalive,
     }
 
     memcpy(&peer->addr, h->h_addr, sizeof(peer->addr));
+    peer->source_addr = update_source.s_addr;
     peer->as = as > 0 ? as : our_as;
     ibgp = peer->as == our_as;
 
@@ -191,15 +197,6 @@ int bgp_start(struct bgp_peer *peer, char *name, int as, int keepalive,
 
     ADD_ATTRIBUTE();
 
-    /* NEXT_HOP */
-    a.flags = BGP_PATH_ATTR_FLAG_TRANS;
-    a.code = BGP_PATH_ATTR_CODE_NEXT_HOP;
-    ip = my_address; /* we're it */
-    a.data.s.len = sizeof(ip);
-    memcpy(a.data.s.value, &ip, sizeof(ip));
-
-    ADD_ATTRIBUTE();
-
     /* MULTI_EXIT_DISC */
     a.flags = BGP_PATH_ATTR_FLAG_OPTIONAL;
     a.code = BGP_PATH_ATTR_CODE_MULTI_EXIT_DISC;
@@ -229,6 +226,25 @@ int bgp_start(struct bgp_peer *peer, char *name, int as, int keepalive,
 
     ADD_ATTRIBUTE();
 
+    /* remember the len before adding NEXT_HOP */
+    peer->path_attr_len_without_nexthop = peer->path_attr_len;
+
+    /* NEXT_HOP */
+    a.flags = BGP_PATH_ATTR_FLAG_TRANS;
+    a.code = BGP_PATH_ATTR_CODE_NEXT_HOP;
+    if (config->nexthop_address)
+    {
+	ip = config->nexthop_address;
+    }
+    else
+    {
+	ip = my_address; /* we're it */
+    }
+    a.data.s.len = sizeof(ip);
+    memcpy(a.data.s.value, &ip, sizeof(ip));
+
+    ADD_ATTRIBUTE();
+
     if (!(peer->path_attrs = malloc(peer->path_attr_len)))
     {
 	LOG(0, 0, 0, "Can't allocate path_attrs for %s (%s)\n",
@@ -238,6 +254,53 @@ int bgp_start(struct bgp_peer *peer, char *name, int as, int keepalive,
     }
 
     memcpy(peer->path_attrs, path_attrs, peer->path_attr_len);
+
+    /* multiprotocol attributes initialization */
+    if (config->ipv6_prefix.s6_addr[0])
+    {
+	struct bgp_attr_mp_reach_nlri_partial mp_reach_nlri_partial;
+	struct bgp_attr_mp_unreach_nlri_partial mp_unreach_nlri_partial;
+
+	a.flags = BGP_PATH_ATTR_FLAG_OPTIONAL;
+	a.code = BGP_PATH_ATTR_CODE_MP_REACH_NLRI;
+	a.data.s.len = 0; /* will be set on UPDATE */
+
+	mp_reach_nlri_partial.afi = htons(BGP_MP_AFI_IPv6);
+	mp_reach_nlri_partial.safi = BGP_MP_SAFI_UNICAST;
+	mp_reach_nlri_partial.reserved = 0;
+	mp_reach_nlri_partial.next_hop_len = 16;
+
+	/* use the defined nexthop6, or our address in ipv6_prefix */
+	if (config->nexthop6_address.s6_addr[0])
+	    memcpy(&mp_reach_nlri_partial.next_hop,
+		    &config->nexthop6_address.s6_addr, 16);
+	else
+	{
+	    /* our address is ipv6prefix::1 */
+	    memcpy(&mp_reach_nlri_partial.next_hop,
+		    &config->ipv6_prefix.s6_addr, 16);
+	    mp_reach_nlri_partial.next_hop[15] = 1;
+	}
+
+	memcpy(&a.data.s.value, &mp_reach_nlri_partial,
+		sizeof(struct bgp_attr_mp_reach_nlri_partial));
+	memcpy(&peer->mp_reach_nlri_partial, &a,
+		BGP_PATH_ATTR_MP_REACH_NLRI_PARTIAL_SIZE);
+
+	a.flags = BGP_PATH_ATTR_FLAG_OPTIONAL | BGP_PATH_ATTR_FLAG_EXTLEN;
+	a.code = BGP_PATH_ATTR_CODE_MP_UNREACH_NLRI;
+	a.data.e.len = 0; /* will be set on UPDATE */
+
+	mp_unreach_nlri_partial.afi = htons(BGP_MP_AFI_IPv6);
+	mp_unreach_nlri_partial.safi = BGP_MP_SAFI_UNICAST;
+
+	memcpy(&a.data.e.value, &mp_unreach_nlri_partial,
+		sizeof(struct bgp_attr_mp_unreach_nlri_partial));
+	memcpy(&peer->mp_unreach_nlri_partial, &a,
+		BGP_PATH_ATTR_MP_UNREACH_NLRI_PARTIAL_SIZE);
+    }
+
+    peer->mp_handling = HandlingUnknown;
 
     LOG(4, 0, 0, "Initiating BGP connection to %s (routing %s)\n",
 	name, enable ? "enabled" : "suspended");
@@ -267,6 +330,8 @@ static void bgp_clear(struct bgp_peer *peer)
 
     bgp_free_routes(peer->routes);
     peer->routes = 0;
+    bgp_free_routes6(peer->routes6);
+    peer->routes6 = 0;
 
     peer->outbuf->packet.header.len = 0;
     peer->outbuf->done = 0;
@@ -327,26 +392,6 @@ static void bgp_set_retry(struct bgp_peer *peer)
     	bgp_halt(peer); /* give up */
 }
 
-/* convert ip/mask to CIDR notation */
-static void bgp_cidr(in_addr_t ip, in_addr_t mask, struct bgp_ip_prefix *pfx)
-{
-    int i;
-    uint32_t b;
-
-    /* convert to prefix notation */
-    pfx->len = 32;
-    pfx->prefix = ip;
-
-    if (!mask) /* bogus */
-		mask = 0xffffffff;
-
-    for (i = 0; i < 32 && ((b = ntohl(1 << i)), !(mask & b)); i++)
-    {
-		pfx->len--;
-		pfx->prefix &= ~b;
-    }
-}
-
 /* insert route into list; sorted */
 static struct bgp_route_list *bgp_insert_route(struct bgp_route_list *head,
     struct bgp_route_list *new)
@@ -356,19 +401,46 @@ static struct bgp_route_list *bgp_insert_route(struct bgp_route_list *head,
 
     while (p && memcmp(&p->dest, &new->dest, sizeof(p->dest)) < 0)
     {
-		e = p;
-		p = p->next;
+	e = p;
+	p = p->next;
     }
 
     if (e)
     {
-		new->next = e->next;
-		e->next = new;
+	new->next = e->next;
+	e->next = new;
     }
     else
     {
-		new->next = head;
-		head = new;
+	new->next = head;
+	head = new;
+    }
+
+    return head;
+}
+
+/* insert route6 into list; sorted */
+static struct bgp_route6_list *bgp_insert_route6(struct bgp_route6_list *head,
+    struct bgp_route6_list *new)
+{
+    struct bgp_route6_list *p = head;
+    struct bgp_route6_list *e = 0;
+
+    while (p && memcmp(&p->dest, &new->dest, sizeof(p->dest)) < 0)
+    {
+	e = p;
+	p = p->next;
+    }
+
+    if (e)
+    {
+	new->next = e->next;
+	e->next = new;
+    }
+    else
+    {
+	new->next = head;
+	head = new;
     }
 
     return head;
@@ -381,28 +453,40 @@ static struct bgp_route_list *bgp_insert_route(struct bgp_route_list *head,
  * that if that route is later deleted we don't have to be concerned
  * about adding back the more specific one).
  */
-int bgp_add_route(in_addr_t ip, in_addr_t mask)
+int bgp_add_route(in_addr_t ip, int prefixlen)
 {
-    struct bgp_ip_prefix add;
-	int i;
+    struct bgp_route_list *r = bgp_routes;
+    struct bgp_route_list add;
+    int i;
 
-    //Convert to CIDR notation
-    bgp_cidr(ip, mask, &add);
+    add.dest.prefix = ip;
+    add.dest.len = prefixlen;
+    add.next = 0;
 
     /* check for duplicate */
-    for (i=0;i < BGP_MAX_ROUTES; i++)
+    while (r)
     {
-			if (!memcmp(&bgp_routes[i], &add, sizeof(struct bgp_ip_prefix)))
-				return 1; /* already covered */
+	i = memcmp(&r->dest, &add.dest, sizeof(r->dest));
+	if (!i)
+	    return 1; /* already covered */
 
-			if (!bgp_routes[i].len) 
-			{
-				memcpy(&bgp_routes[i], &add, sizeof(struct bgp_ip_prefix));
-				break;
-			}
+	if (i > 0)
+	    break;
+
+	r = r->next;
     }
 
-	qsort(bgp_routes,i+1,sizeof(struct bgp_ip_prefix),compare_bgp_ip_prefixes);
+    /* insert into route list; sorted */
+    if (!(r = malloc(sizeof(*r))))
+    {
+	LOG(0, 0, 0, "Can't allocate route for %s/%d (%s)\n",
+	    fmtaddr(add.dest.prefix, 0), add.dest.len, strerror(errno));
+
+	return 0;
+    }
+
+    memcpy(r, &add, sizeof(*r));
+    bgp_routes = bgp_insert_route(bgp_routes, r);
 
     /* flag established peers for update */
     for (i = 0; i < BGP_NUM_PEERS; i++)
@@ -410,54 +494,102 @@ int bgp_add_route(in_addr_t ip, in_addr_t mask)
 	    bgp_peers[i].update_routes = 1;
 
     LOG(4, 0, 0, "Registered BGP route %s/%d\n",
-	fmtaddr(add.prefix, 0), add.len);
+	fmtaddr(add.dest.prefix, 0), add.dest.len);
 
     return 1;
 }
 
-static int compare_bgp_ip_prefixes(const void *a, const void *b) {
-	const struct bgp_ip_prefix *bgpa = (const struct bgp_ip_prefix *) a;
-	const struct bgp_ip_prefix *bgpb = (const struct bgp_ip_prefix *) b;
-	return memcmp(bgpa, bgpb, sizeof(const struct bgp_ip_prefix));
+/* add route to list for peers */
+/*
+ * Note: same provisions as above
+ */
+int bgp_add_route6(struct in6_addr ip, int prefixlen)
+{
+    struct bgp_route6_list *r = bgp_routes6;
+    struct bgp_route6_list add;
+    int i;
+    char ipv6addr[INET6_ADDRSTRLEN];
+
+    memcpy(&add.dest.prefix, &ip.s6_addr, 16);
+    add.dest.len = prefixlen;
+    add.next = 0;
+
+    /* check for duplicate */
+    while (r)
+    {
+	i = memcmp(&r->dest, &add.dest, sizeof(r->dest));
+	if (!i)
+	    return 1; /* already covered */
+
+	if (i > 0)
+	    break;
+
+	r = r->next;
+    }
+
+    /* insert into route list; sorted */
+    if (!(r = malloc(sizeof(*r))))
+    {
+	LOG(0, 0, 0, "Can't allocate route for %s/%d (%s)\n",
+	    inet_ntop(AF_INET6, &ip, ipv6addr, INET6_ADDRSTRLEN), add.dest.len,
+	    strerror(errno));
+
+	return 0;
+    }
+
+    memcpy(r, &add, sizeof(*r));
+    bgp_routes6 = bgp_insert_route6(bgp_routes6, r);
+
+    /* flag established peers for update */
+    for (i = 0; i < BGP_NUM_PEERS; i++)
+	if (bgp_peers[i].state == Established
+		&& bgp_peers[i].mp_handling == HandleIPv6Routes)
+	    bgp_peers[i].update_routes6 = 1;
+
+    LOG(4, 0, 0, "Registered BGP route %s/%d\n",
+	inet_ntop(AF_INET6, &ip, ipv6addr, INET6_ADDRSTRLEN), add.dest.len);
+
+    return 1;
 }
 
 /* remove route from list for peers */
-int bgp_del_route(in_addr_t ip, in_addr_t mask)
+int bgp_del_route(in_addr_t ip, int prefixlen)
 {
+    struct bgp_route_list *r = bgp_routes;
+    struct bgp_route_list *e = 0;
+    struct bgp_route_list del;
     int i;
-	struct bgp_ip_prefix del;
 
-    bgp_cidr(ip, mask, &del);
+    del.dest.prefix = ip;
+    del.dest.len = prefixlen;
+    del.next = 0;
 
-    /* find route to be removed */
-    for (i=0;i < BGP_MAX_ROUTES; i++)
+    /* find entry in routes list and remove */
+    while (r)
     {
-			if (!memcmp(&bgp_routes[i], &del, sizeof(struct bgp_ip_prefix))) {
-				memset(&bgp_routes[i], 0, sizeof(struct bgp_ip_prefix)); //Clear the route
-				break;
-			}
+	i = memcmp(&r->dest, &del.dest, sizeof(r->dest));
+	if (!i)
+	{
+	    if (e)
+		e->next = r->next;
+	    else
+	    	bgp_routes = r->next;
 
-			if (!bgp_routes[i].len) 
-				return 1; //not found.
+	    free(r);
+	    break;
+	}
+
+	e = r;
+
+	if (i > 0)
+	    r = 0; /* stop */
+	else
+	    r = r->next;
     }
 
-    //Now we need to shuffle things along
-    while (i < BGP_MAX_ROUTES) {
-	if (bgp_routes[i+1].len == 0) {
-		break; //We've finished
-	}
-	if (bgp_routes[i].len != 0) {
-		LOG(0,0,0, "Failed to remove a route! BGP route table likely now broken.\n");
-		return 1;
-	}
-	if (bgp_routes[i+1].len) {
-		memcpy(&bgp_routes[i], &bgp_routes[i+1], sizeof(bgp_routes[i+1]));
-		memset(&bgp_routes[i+1], 0, sizeof(bgp_routes[i+1]));
-	}
-	i++;
-    }
-
-	qsort(bgp_routes,i,sizeof(struct bgp_ip_prefix),compare_bgp_ip_prefixes);
+    /* not found */
+    if (!r)
+	return 1;
 
     /* flag established peers for update */
     for (i = 0; i < BGP_NUM_PEERS; i++)
@@ -465,7 +597,59 @@ int bgp_del_route(in_addr_t ip, in_addr_t mask)
 	    bgp_peers[i].update_routes = 1;
 
     LOG(4, 0, 0, "Removed BGP route %s/%d\n",
-	fmtaddr(del.prefix, 0), del.len);
+	fmtaddr(del.dest.prefix, 0), del.dest.len);
+
+    return 1;
+}
+
+/* remove route from list for peers */
+int bgp_del_route6(struct in6_addr ip, int prefixlen)
+{
+    struct bgp_route6_list *r = bgp_routes6;
+    struct bgp_route6_list *e = 0;
+    struct bgp_route6_list del;
+    int i;
+    char ipv6addr[INET6_ADDRSTRLEN];
+
+    memcpy(&del.dest.prefix, &ip.s6_addr, 16);
+    del.dest.len = prefixlen;
+    del.next = 0;
+
+    /* find entry in routes list and remove */
+    while (r)
+    {
+	i = memcmp(&r->dest, &del.dest, sizeof(r->dest));
+	if (!i)
+	{
+	    if (e)
+		e->next = r->next;
+	    else
+		bgp_routes6 = r->next;
+
+	    free(r);
+	    break;
+	}
+
+	e = r;
+
+	if (i > 0)
+	    r = 0; /* stop */
+	else
+	    r = r->next;
+    }
+
+    /* not found */
+    if (!r)
+	return 1;
+
+    /* flag established peers for update */
+    for (i = 0; i < BGP_NUM_PEERS; i++)
+	if (bgp_peers[i].state == Established
+		&& bgp_peers[i].mp_handling == HandleIPv6Routes)
+	    bgp_peers[i].update_routes6 = 1;
+
+    LOG(4, 0, 0, "Removed BGP route %s/%d\n",
+	inet_ntop(AF_INET6, &ip, ipv6addr, INET6_ADDRSTRLEN), del.dest.len);
 
     return 1;
 }
@@ -614,41 +798,84 @@ int bgp_process(uint32_t events[])
 		continue;
 	}
 
-	/* process timers */
-	if (peer->state == Established)
+	/* process pending IPv6 updates */
+	if (peer->update_routes6
+	    && !peer->outbuf->packet.header.len) /* ditto */
 	{
-	    if (time_now > peer->expire_time)
-	    {
-		LOG(1, 0, 0, "No message from BGP peer %s in %ds\n",
-		    peer->name, peer->hold);
-
-		bgp_send_notification(peer, BGP_ERR_HOLD_TIMER_EXP, 0);
+	    if (!bgp_send_update6(peer))
 		continue;
-	    }
+	}
 
-	    if (time_now > peer->keepalive_time && !peer->outbuf->packet.header.len)
-		bgp_send_keepalive(peer);
-	}
-	else if (peer->state == Idle)
-	{
-	    if (time_now > peer->retry_time)
-		bgp_connect(peer);
-	}
-	else if (time_now > peer->state_time + BGP_STATE_TIME)
-	{
-	    LOG(1, 0, 0, "%s timer expired for BGP peer %s\n",
-		bgp_state_str(peer->state), peer->name);
-
-	    bgp_restart(peer);
-	}
+	/* process timers */
+	bgp_process_timers(peer);
     }
 
     return 1;
 }
 
+/* process bgp timers only */
+void bgp_process_peers_timers()
+{
+    int i;
+
+    if (!bgp_configured)
+	return;
+
+    for (i = 0; i < BGP_NUM_PEERS; i++)
+    {
+	struct bgp_peer *peer = &bgp_peers[i];
+
+	if (peer->state == Disabled)
+	    continue;
+
+	bgp_process_timers(peer);
+    }
+}
+
+static void bgp_process_timers(struct bgp_peer *peer)
+{
+    if (peer->state == Established)
+    {
+	if (time_now > peer->expire_time)
+	{
+	    LOG(1, 0, 0, "No message from BGP peer %s in %ds\n",
+		peer->name, peer->hold);
+
+	    bgp_send_notification(peer, BGP_ERR_HOLD_TIMER_EXP, 0);
+	    return;
+	}
+
+	if (time_now > peer->keepalive_time && !peer->outbuf->packet.header.len)
+	    bgp_send_keepalive(peer);
+    }
+    else if (peer->state == Idle)
+    {
+	if (time_now > peer->retry_time)
+	    bgp_connect(peer);
+    }
+    else if (time_now > peer->state_time + BGP_STATE_TIME)
+    {
+	LOG(1, 0, 0, "%s timer expired for BGP peer %s\n",
+	    bgp_state_str(peer->state), peer->name);
+
+	bgp_restart(peer);
+    }
+}
+
 static void bgp_free_routes(struct bgp_route_list *routes)
 {
     struct bgp_route_list *tmp;
+
+    while ((tmp = routes))
+    {
+	routes = tmp->next;
+	free(tmp);
+    }
+}
+
+static void bgp_free_routes6(struct bgp_route6_list *routes)
+{
+    struct bgp_route6_list *tmp;
 
     while ((tmp = routes))
     {
@@ -691,6 +918,7 @@ static int bgp_connect(struct bgp_peer *peer)
 {
     static int bgp_port = 0;
     struct sockaddr_in addr;
+    struct sockaddr_in source_addr;
     struct epoll_event ev;
 
     if (!bgp_port)
@@ -721,6 +949,19 @@ static int bgp_connect(struct bgp_peer *peer)
 
     /* set to non-blocking */
     fcntl(peer->sock, F_SETFL, fcntl(peer->sock, F_GETFL, 0) | O_NONBLOCK);
+
+    /* set source address */
+    memset(&source_addr, 0, sizeof(source_addr));
+    source_addr.sin_family = AF_INET;
+    source_addr.sin_addr.s_addr = peer->source_addr; /* defaults to INADDR_ANY */
+    if (bind(peer->sock, (struct sockaddr *) &source_addr, sizeof(source_addr)) < 0)
+    {
+	LOG(1, 0, 0, "Can't set source address to %s: %s\n",
+	    inet_ntoa(source_addr.sin_addr), strerror(errno));
+
+	bgp_set_retry(peer);
+	return 0;
+    }
 
     /* try connect */
     memset(&addr, 0, sizeof(addr));
@@ -897,6 +1138,12 @@ static int bgp_handle_input(struct bgp_peer *peer)
 	    struct bgp_data_open data;
 	    int hold;
 	    int i;
+	    off_t param_offset, capability_offset;
+	    struct bgp_opt_param *param;
+	    uint8_t capabilities_len;
+	    char *capabilities = NULL;
+	    struct bgp_capability *capability;
+	    struct bgp_mp_cap_param *mp_cap;
 
 	    for (i = 0; i < sizeof(p->header.marker); i++)
 	    {
@@ -959,6 +1206,91 @@ static int bgp_handle_input(struct bgp_peer *peer)
 	    if (peer->keepalive * 3 > peer->hold)
 		peer->keepalive = peer->hold / 3;
 
+	    /* check for optional parameters */
+	    /* 2 is for the size of type + len (both uint8_t) */
+	    for (param_offset = 0;
+		    param_offset < data.opt_len;
+		    param_offset += 2 + param->len)
+	    {
+		param = (struct bgp_opt_param *)((char *)&data.opt_params + param_offset);
+
+		/* sensible check */
+		if (data.opt_len - param_offset < 2
+			|| param->len > data.opt_len - param_offset - 2)
+		{
+		    LOG(1, 0, 0, "Malformed Optional Parameter list from BGP peer %s\n",
+			peer->name);
+
+		    bgp_send_notification(peer, BGP_ERR_OPEN, BGP_ERR_UNSPEC);
+		    return 0;
+		}
+
+		/* we know only one parameter type */
+		if (param->type != BGP_PARAM_TYPE_CAPABILITY)
+		{
+		    LOG(1, 0, 0, "Unsupported Optional Parameter type %d from BGP peer %s\n",
+			param->type, peer->name);
+
+		    bgp_send_notification(peer, BGP_ERR_OPEN, BGP_ERR_OPN_UNSUP_PARAM);
+		    return 0;
+		}
+
+		capabilities_len = param->len;
+		capabilities = (char *)&param->value;
+
+		/* look for BGP multiprotocol capability */
+		for (capability_offset = 0;
+			capability_offset < capabilities_len;
+			capability_offset += 2 + capability->len)
+		{
+		    capability = (struct bgp_capability *)(capabilities + capability_offset);
+
+		    /* sensible check */
+		    if (capabilities_len - capability_offset < 2
+			    || capability->len > capabilities_len - capability_offset - 2)
+		    {
+			LOG(1, 0, 0, "Malformed Capabilities list from BGP peer %s\n",
+			    peer->name);
+
+			bgp_send_notification(peer, BGP_ERR_OPEN, BGP_ERR_UNSPEC);
+			return 0;
+		    }
+
+		    /* we only know one capability code */
+		    if (capability->code != BGP_CAP_CODE_MP
+			    && capability->len != sizeof(struct bgp_mp_cap_param))
+		    {
+			LOG(4, 0, 0, "Unsupported Capability code %d from BGP peer %s\n",
+			    capability->code, peer->name);
+
+			/* we don't terminate, still; we just jump to the next one */
+			continue;
+		    }
+
+		    mp_cap = (struct bgp_mp_cap_param *)&capability->value;
+		    /* the only <AFI, SAFI> tuple we support */
+		    if (ntohs(mp_cap->afi) != BGP_MP_AFI_IPv6 && mp_cap->safi != BGP_MP_SAFI_UNICAST)
+		    {
+			LOG(4, 0, 0, "Unsupported multiprotocol AFI %d and SAFI %d from BGP peer %s\n",
+			    mp_cap->afi, mp_cap->safi, peer->name);
+
+			/* we don't terminate, still; we just jump to the next one */
+			continue;
+		    }
+
+		    /* yes it can! */
+		    peer->mp_handling = HandleIPv6Routes;
+		}
+	    }
+
+	    if (peer->mp_handling != HandleIPv6Routes)
+	    {
+		peer->mp_handling = DoesntHandleIPv6Routes;
+		if (config->ipv6_prefix.s6_addr[0])
+		    LOG(1, 0, 0, "Warning: BGP peer %s doesn't handle IPv6 prefixes updates\n",
+			    peer->name);
+	    }
+
 	    /* next transition requires an exchange of keepalives */
 	    bgp_send_keepalive(peer);
 
@@ -991,8 +1323,28 @@ static int bgp_handle_input(struct bgp_peer *peer)
 	    if (notification->error_code == BGP_ERR_CEASE)
 	    {
 		LOG(4, 0, 0, "BGP peer %s sent CEASE\n", peer->name);
-		bgp_restart(peer);
+		bgp_set_retry(peer);
 		return 0;
+	    }
+
+	    if (notification->error_code == BGP_ERR_OPEN
+		    && notification->error_subcode == BGP_ERR_OPN_UNSUP_PARAM)
+	    {
+		LOG(4, 0, 0, "BGP peer %s doesn't support BGP Capabilities\n", peer->name);
+		peer->mp_handling = DoesntHandleIPv6Routes;
+		bgp_set_retry(peer);
+		return 0;
+	    }
+
+	    if (notification->error_code == BGP_ERR_OPEN
+		    && notification->error_subcode == BGP_ERR_OPN_UNSUP_CAP)
+	    {
+		/* the only capability we advertise is this one, so upon receiving
+		   an "unsupported capability" message, we disable IPv6 routes for
+		   this peer */
+		LOG(4, 0, 0, "BGP peer %s doesn't support IPv6 routes advertisement\n", peer->name);
+		peer->mp_handling = DoesntHandleIPv6Routes;
+		break;
 	    }
 
 	    /* FIXME: should handle more notifications */
@@ -1025,6 +1377,9 @@ static int bgp_handle_input(struct bgp_peer *peer)
 static int bgp_send_open(struct bgp_peer *peer)
 {
     struct bgp_data_open data;
+    struct bgp_mp_cap_param mp_ipv6 = { htons(BGP_MP_AFI_IPv6), 0, BGP_MP_SAFI_UNICAST };
+    struct bgp_capability cap_mp_ipv6;
+    struct bgp_opt_param param_cap_mp_ipv6;
     uint16_t len = sizeof(peer->outbuf->packet.header);
 
     memset(peer->outbuf->packet.header.marker, 0xff,
@@ -1035,11 +1390,35 @@ static int bgp_send_open(struct bgp_peer *peer)
     data.version = BGP_VERSION;
     data.as = htons(our_as);
     data.hold_time = htons(peer->hold);
-    data.identifier = my_address;
-    data.opt_len = 0;
+    /* use the source IP we use as identifier, if available */
+    if (peer->source_addr != INADDR_ANY)
+	data.identifier = peer->source_addr;
+    else
+	data.identifier = my_address;
 
-    memcpy(peer->outbuf->packet.data, &data, BGP_DATA_OPEN_SIZE);
-    len += BGP_DATA_OPEN_SIZE;
+    /* if we know peer doesn't support MP (mp_handling == DoesntHandleIPv6Routes)
+       then don't add this parameter */
+    if (config->ipv6_prefix.s6_addr[0]
+	    && (peer->mp_handling == HandlingUnknown
+		|| peer->mp_handling == HandleIPv6Routes))
+    {
+	/* construct the param and capability */
+	cap_mp_ipv6.code = BGP_CAP_CODE_MP;
+	cap_mp_ipv6.len = sizeof(mp_ipv6);
+	memcpy(&cap_mp_ipv6.value, &mp_ipv6, cap_mp_ipv6.len);
+
+	param_cap_mp_ipv6.type = BGP_PARAM_TYPE_CAPABILITY;
+	param_cap_mp_ipv6.len = 2 + sizeof(mp_ipv6);
+	memcpy(&param_cap_mp_ipv6.value, &cap_mp_ipv6, param_cap_mp_ipv6.len);
+
+	data.opt_len = 2 + param_cap_mp_ipv6.len;
+	memcpy(&data.opt_params, &param_cap_mp_ipv6, data.opt_len);
+    }
+    else
+	data.opt_len = 0;
+
+    memcpy(peer->outbuf->packet.data, &data, BGP_DATA_OPEN_SIZE + data.opt_len);
+    len += BGP_DATA_OPEN_SIZE + data.opt_len;
 
     peer->outbuf->packet.header.len = htons(len);
     peer->outbuf->done = 0;
@@ -1071,20 +1450,10 @@ static int bgp_send_update(struct bgp_peer *peer)
     uint16_t attr_len;
     uint16_t len = sizeof(peer->outbuf->packet.header);
     struct bgp_route_list *have = peer->routes;
-    uint32_t want_index = 0;
-    struct bgp_ip_prefix *want_array = peer->routing ? bgp_routes : 0;
-    struct bgp_ip_prefix *want = 0;
-    struct bgp_route_list *add = 0;
+    struct bgp_route_list *want = peer->routing ? bgp_routes : 0;
     struct bgp_route_list *e = 0;
+    struct bgp_route_list *add = 0;
     int s;
-
-    if (peer->routing) {
-	if (want_array[0].len != 0) {
-		want = &want_array[0];
-	} else {
-		want = 0;
-	}
-    }
 
     char *data = (char *) &peer->outbuf->packet.data;
 
@@ -1109,7 +1478,7 @@ static int bgp_send_update(struct bgp_peer *peer)
     {
 	if (have)
 	    s = want
-		? memcmp(&have->dest, want, sizeof(have->dest))
+		? memcmp(&have->dest, &want->dest, sizeof(have->dest))
 	    	: -1;
 	else
 	    s = 1;
@@ -1141,9 +1510,7 @@ static int bgp_send_update(struct bgp_peer *peer)
 	    {
 		e = have; /* stash the last found to relink above */
 		have = have->next;
-		//this is an array now
-		want_index++;
-		want = (want_array[want_index].len != 0) ? &want_array[want_index] : 0;
+		want = want->next;
 	    }
 	    else if (s > 0) /* addition reqd. */
 	    {
@@ -1154,20 +1521,10 @@ static int bgp_send_update(struct bgp_peer *peer)
 		    	break;
 		}
 		else
-		{
-		    if (!(add = malloc(sizeof(struct bgp_route_list))))
-		    {
-			LOG(0, 0, 0, "Can't allocate route for %s/%d (%s)\n",
-			fmtaddr(want->prefix, 0), add->dest.len, strerror(errno));
+		    add = want;
 
-			return 0;
-		    }
-		    memcpy(&add->dest, want, sizeof(struct bgp_ip_prefix));
-		}
-
-		//this is an array now
-		want_index++;
-		want = (want_array[want_index].len != 0) ? &want_array[want_index] : 0;
+		if (want)
+		    want = want->next;
 	    }
 	}
     }
@@ -1185,8 +1542,17 @@ static int bgp_send_update(struct bgp_peer *peer)
 
     if (add)
     {
-	add->next = 0;
-	peer->routes = bgp_insert_route(peer->routes, add);
+	if (!(e = malloc(sizeof(*e))))
+	{
+	    LOG(0, 0, 0, "Can't allocate route for %s/%d (%s)\n",
+		fmtaddr(add->dest.prefix, 0), add->dest.len, strerror(errno));
+
+	    return 0;
+	}
+
+	memcpy(e, add, sizeof(*e));
+	e->next = 0;
+	peer->routes = bgp_insert_route(peer->routes, e);
 
 	attr_len = htons(peer->path_attr_len);
 	memcpy(data, &attr_len, sizeof(attr_len));
@@ -1202,7 +1568,7 @@ static int bgp_send_update(struct bgp_peer *peer)
 	data += s;
 	len += s;
 
-	LOG(3, 0, 0, "Advertising route %s/%d to BGP peer %s\n",
+	LOG(5, 0, 0, "Advertising route %s/%d to BGP peer %s\n",
 	    fmtaddr(add->dest.prefix, 0), add->dest.len, peer->name);
     }
     else
@@ -1212,6 +1578,179 @@ static int bgp_send_update(struct bgp_peer *peer)
 	data += sizeof(attr_len);
 	len += sizeof(attr_len);
     }
+
+    peer->outbuf->packet.header.len = htons(len);
+    peer->outbuf->done = 0;
+
+    return bgp_write(peer);
+}
+
+/* send/buffer UPDATE message for IPv6 routes */
+static int bgp_send_update6(struct bgp_peer *peer)
+{
+    uint16_t attr_len;
+    uint16_t unreach_len = 0;
+    char *unreach_len_pos;
+    uint8_t reach_len;
+    uint16_t len = sizeof(peer->outbuf->packet.header);
+    struct bgp_route6_list *have = peer->routes6;
+    struct bgp_route6_list *want = peer->routing ? bgp_routes6 : 0;
+    struct bgp_route6_list *e = 0;
+    struct bgp_route6_list *add = 0;
+    int s;
+    char ipv6addr[INET6_ADDRSTRLEN];
+
+    char *data = (char *) &peer->outbuf->packet.data;
+
+    /* need leave room for attr_len, bgp_path_attrs and one prefix */
+    char *max = (char *) &peer->outbuf->packet.data
+	+ sizeof(peer->outbuf->packet.data)
+	- sizeof(attr_len) - peer->path_attr_len_without_nexthop
+	- BGP_PATH_ATTR_MP_REACH_NLRI_PARTIAL_SIZE - sizeof(struct bgp_ip6_prefix);
+
+    memset(peer->outbuf->packet.header.marker, 0xff,
+	sizeof(peer->outbuf->packet.header.marker));
+
+    peer->outbuf->packet.header.type = BGP_MSG_UPDATE;
+
+    /* insert non-MP unfeasible routes length */
+    memcpy(data, &unreach_len, sizeof(unreach_len));
+    /* skip over it and attr_len too; it will be filled when known */
+    data += sizeof(unreach_len) + sizeof(attr_len);
+    len += sizeof(unreach_len) + sizeof(attr_len);
+
+    /* copy usual attributes */
+    memcpy(data, peer->path_attrs, peer->path_attr_len_without_nexthop);
+    data += peer->path_attr_len_without_nexthop;
+    attr_len = peer->path_attr_len_without_nexthop;
+
+    /* copy MP unreachable NLRI heading */
+    memcpy(data, peer->mp_unreach_nlri_partial,
+	    BGP_PATH_ATTR_MP_UNREACH_NLRI_PARTIAL_SIZE);
+    /* remember where to update this attr len */
+    unreach_len_pos = data + 2;
+    data += BGP_PATH_ATTR_MP_UNREACH_NLRI_PARTIAL_SIZE;
+    attr_len += BGP_PATH_ATTR_MP_UNREACH_NLRI_PARTIAL_SIZE;
+
+    peer->update_routes6 = 0; /* tentatively clear */
+
+    /* find differences */
+    while ((have || want) && data < (max - sizeof(struct bgp_ip6_prefix)))
+    {
+	if (have)
+	    s = want
+		? memcmp(&have->dest, &want->dest, sizeof(have->dest))
+		: -1;
+	else
+	    s = 1;
+
+	if (s < 0) /* found one to delete */
+	{
+	    struct bgp_route6_list *tmp = have;
+	    have = have->next;
+
+	    s = BGP_IP_PREFIX_SIZE(tmp->dest);
+	    memcpy(data, &tmp->dest, s);
+	    data += s;
+	    unreach_len += s;
+	    attr_len += s;
+
+	    LOG(5, 0, 0, "Withdrawing route %s/%d from BGP peer %s\n",
+		inet_ntop(AF_INET6, &tmp->dest.prefix, ipv6addr, INET6_ADDRSTRLEN),
+		tmp->dest.len, peer->name);
+
+	    free(tmp);
+
+	    if (e)
+		e->next = have;
+	    else
+		peer->routes6 = have;
+	}
+	else
+	{
+	    if (!s) /* same */
+	    {
+		e = have; /* stash the last found to relink above */
+		have = have->next;
+		want = want->next;
+	    }
+	    else if (s > 0) /* addition reqd. */
+	    {
+		if (add)
+		{
+		    peer->update_routes6 = 1; /* only one add per packet */
+		    if (!have)
+			break;
+		}
+		else
+		    add = want;
+
+		if (want)
+		    want = want->next;
+	    }
+	}
+    }
+
+    if (have || want)
+	peer->update_routes6 = 1; /* more to do */
+
+    /* anything changed? */
+    if (!(unreach_len || add))
+	return 1;
+
+    if (unreach_len)
+    {
+	/* go back and insert MP unreach_len */
+	unreach_len += sizeof(struct bgp_attr_mp_unreach_nlri_partial);
+	unreach_len = htons(unreach_len);
+	memcpy(unreach_len_pos, &unreach_len, sizeof(unreach_len));
+    }
+    else
+    {
+	/* we can remove this attribute, then */
+	data -= BGP_PATH_ATTR_MP_UNREACH_NLRI_PARTIAL_SIZE;
+	attr_len -= BGP_PATH_ATTR_MP_UNREACH_NLRI_PARTIAL_SIZE;
+    }
+
+    if (add)
+    {
+	if (!(e = malloc(sizeof(*e))))
+	{
+	    LOG(0, 0, 0, "Can't allocate route for %s/%d (%s)\n",
+		inet_ntop(AF_INET6, &add->dest.prefix, ipv6addr, INET6_ADDRSTRLEN),
+		add->dest.len, strerror(errno));
+
+	    return 0;
+	}
+
+	memcpy(e, add, sizeof(*e));
+	e->next = 0;
+	peer->routes6 = bgp_insert_route6(peer->routes6, e);
+
+	/* copy MP reachable NLRI heading */
+	memcpy(data, peer->mp_reach_nlri_partial,
+		BGP_PATH_ATTR_MP_REACH_NLRI_PARTIAL_SIZE);
+	/* with proper len */
+	reach_len = BGP_IP_PREFIX_SIZE(add->dest);
+	data[2] = sizeof(struct bgp_attr_mp_reach_nlri_partial) + reach_len;
+	data += BGP_PATH_ATTR_MP_REACH_NLRI_PARTIAL_SIZE;
+	attr_len += BGP_PATH_ATTR_MP_REACH_NLRI_PARTIAL_SIZE;
+
+	memcpy(data, &add->dest, reach_len);
+	data += reach_len;
+	attr_len += reach_len;
+
+	LOG(5, 0, 0, "Advertising route %s/%d to BGP peer %s\n",
+	    inet_ntop(AF_INET6, &add->dest.prefix, ipv6addr, INET6_ADDRSTRLEN),
+	    add->dest.len, peer->name);
+    }
+
+    /* update len with attributes we added */
+    len += attr_len;
+
+    /* go back and insert attr_len */
+    attr_len = htons(attr_len);
+    memcpy((char *)&peer->outbuf->packet.data + 2, &attr_len, sizeof(attr_len));
 
     peer->outbuf->packet.header.len = htons(len);
     peer->outbuf->done = 0;

@@ -1,5 +1,4 @@
 /* kludge up some limited epoll semantics using select for 2.4 kernels */
-/* $Id: fake_epoll.h,v 1.1 2005-06-04 15:42:35 bodea Exp $ */
 
 #ifndef __FAKE_EPOLL_H__
 #define __FAKE_EPOLL_H__

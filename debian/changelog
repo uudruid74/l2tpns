@@ -1,6 +1,47 @@
 l2tpns (2.2.1-1) unstable; urgency=low
 
-  * New upstream release.
+  * Add of the RDNSS option to ICMPv6 Router Advertisement (RA).
+
+ -- Fernando Alves <fendo@sameswifi.fr>  Thu, 02 Oct 2014 00:24:31 +0200
+
+l2tpns (2.2.1-2fdn3.16) unstable; urgency=low
+
+  * Fix: IPv6 prefix routing on slave cluster
+
+ -- Fernando Alves <fendo@sameswifi.fr>  Mon, 22 Sep 2014 09:13:21 +0200
+
+l2tpns (2.2.1-2fdn3.15) unstable; urgency=low
+
+  * new feature: If the user attribute "Framed-IPv6-Address" is defined then the ICMPv6_RA advertise this IPv6 address.
+  * Fix: Incorrect delegation of IPv6 prefixes when multiple of 4 bits (nibble) (eg: /44, /52 ...).
+  * Added ability to define up to 5 IPv6 prefix delegation by user.
+
+ -- Fernando Alves <fendo@sameswifi.fr>  Thu, 18 Sep 2014 18:36:43 +0200
+
+l2tpns (2.2.1-2fdn3.14) unstable; urgency=low
+
+  * Fix cluster slave; reset to 0, the end of the session when the master version < slave version.
+  * Fix cluster slave; no add the ipv6 route address (/128) if included in the delegated prefix.
+
+ -- Fernando Alves <fendo@sameswifi.fr>  Fri, 12 Sep 2014 18:21:53 +0200
+
+l2tpns (2.2.1-2fdn3.13) unstable; urgency=low
+
+  * Add DHCPv6 functionality
+
+ -- Fernando Alves <fendo@sameswifi.fr>  Thu, 11 Sep 2014 16:10:38 +0200
+
+l2tpns (2.2.1-2fdn3.12) unstable; urgency=low
+
+  * Fix: remove old IPV6 routes on master
+
+ -- Fernando Alves <fendo@sameswifi.fr>  Tue, 10 Dec 2013 23:13:20 +0100
+
+l2tpns (2.2.1-2fdn3.11) unstable; urgency=low
+
+  * Fix: throttle ipv6 out.
+  * Fix: remove old IPV6 routes on slave
+  * Fix: compiling Warning, dpkg-buildflags ...
   * Enabled hardened build flags, thanks Moritz Muehlenhoff (closes: #657846)
   * Packaging updates
     * Move to 3.0 (quilt) source format
@@ -11,7 +52,181 @@ l2tpns (2.2.1-1) unstable; urgency=low
   * Bump Standards-Version to 3.9.4.0
     * Add build-arch/build-indep targets to debian/rules
 
- -- Jonathan McDowell <noodles@earth.li>  Tue, 04 Jun 2013 20:23:37 -0700
+ -- Fernando Alves <fendo@sameswifi.fr>  Tue, 10 Dec 2013 23:08:45 +0100
+
+l2tpns (2.2.1-2fdn3.10) unstable; urgency=low
+
+  * Fix: authentication success was sent 2 times.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Tue, 04 Jun 2013 11:38:04 +0200
+
+l2tpns (2.2.1-2fdn3.9) unstable; urgency=low
+
+  * Adding the possibility to set multiple hostname.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Thu, 23 May 2013 23:58:23 +0200
+
+l2tpns (2.2.1-2fdn3.8) unstable; urgency=low
+
+  * Fix: send SCCCN requested challenge response.
+  * add accounting parameter account_all_origin.
+  * Fix service_name management and add pppoe_only_equal_svc_name parameter.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Tue, 30 Apr 2013 16:02:33 +0200
+
+l2tpns (2.2.1-2fdn3.7) unstable; urgency=low
+
+  * Adding the possibility to listening multiple IP L2TP Tunnels
+  * Removing LAC flag.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Thu, 28 Mar 2013 10:50:00 +0100
+
+l2tpns (2.2.1-2fdn3.6) unstable; urgency=low
+
+  * Fix Warning: dereferencing type-punned pointer will break strict...
+  * Fix: Tunnel creation does not work when the length of the hostname is odd. (revert fix: Add a uint16_t control buffer type, as a union)
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Tue, 26 Feb 2013 09:07:16 +0100
+
+l2tpns (2.2.1-2fdn3.5) unstable; urgency=low
+
+  * Update debian/changelog
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Sun, 10 Feb 2013 23:39:56 +0100
+
+l2tpns (2.2.1-2fdn3.4) unstable; urgency=low
+
+  * Add parameter to disable the send of the L2TP HELLO message (Apple compatibility).
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Tue, 15 Jan 2013 15:17:22 +0100
+
+l2tpns (2.2.1-2fdn3.3) unstable; urgency=low
+
+  * pppoe server functionality
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Thu, 27 Dec 2012 22:54:02 +0100
+
+l2tpns (2.2.1-2fdn3.2) unstable; urgency=low
+
+  * Authorize to change the source IP of the tunnels l2tp.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Wed, 26 Dec 2012 10:57:10 +0100
+
+l2tpns (2.2.1-2fdn3.1) unstable; urgency=low
+
+  * Add tundevicename configuration option
+  * Fix: last_packet no updated in cluster mode
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Fri, 21 Dec 2012 11:41:42 +0100
+
+l2tpns (2.2.1-2fdn3) unstable; urgency=low
+
+  * LAC functionality merged from dev-lac branch.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Sat, 18 Dec 2012 19:25:32 +0100
+
+l2tpns (2.2.1-2fdn2.2) unstable; urgency=low
+
+  * Add LAC functionality
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Sat, 15 Dec 2012 01:10:32 +0100
+
+l2tpns (2.2.1-2fdn2.1) unstable; urgency=low
+
+  * Fix the inverted "delete/add" of the routes, in cluster mode. 
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Sun, 18 Nov 2012 15:59:44 +0100
+
+l2tpns (2.2.1-2fdn2) unstable; urgency=low
+
+  * merge from branch fendo-mods, MLPPP developments
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Sat, 17 Nov 2012 14:15:07 +0100
+
+l2tpns (2.2.1-2fdn1.5) unstable; urgency=low
+
+  * MLPPP not working in cluster mode.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Wed, 09 May 2012 17:25:05 +0200
+
+l2tpns (2.2.1-2fdn1.4) unstable; urgency=low
+
+  * Add a echo_timeout configuration option.
+  * Add a idle_echo_timeout configuration option.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Mon, 20 Feb 2012 20:47:52 +0100
+
+l2tpns (2.2.1-2fdn1.3) unstable; urgency=low
+
+  * Fix: Sends small packets in the MPPPP frame (for reorder).
+  * Fix: Calculates jitter and jitter traces for analysis.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Wed, 15 Feb 2012 14:15:59 +0100
+
+l2tpns (2.2.1-2fdn1.2) unstable; urgency=low
+
+  * Fix: MLPPP improvments.
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Sun, 12 Feb 2012 13:53:13 +0100
+
+l2tpns (2.2.1-2fdn1.1) unstable; urgency=low
+
+  * Fix MLPPP functionality
+  * Fix warning compilation on ppp.c
+
+ -- Fernando Alves <fernando.alves@sameswireless.fr>  Fri, 03 Feb 2012 16:16:56 +0100
+
+l2tpns (2.2.1-2fdn1) unstable; urgency=low
+
+  * Fix binding the CLI to a specific address
+  * Merge latest upstream version (hence the version bump)
+
+ -- Benjamin Cama <benoar@dolka.fr>  Thu, 02 Feb 2012 02:30:06 +0100
+
+l2tpns (2.2.1-1fdn3) unstable; urgency=low
+
+  * Change the rtm_proto to some arbitrary-defined value.
+  * Set hostname /after/ having read the config file.
+  * Fix logging of the tunnel number in different places.
+  * Several cleanups.
+
+ -- Benjamin Cama <benoar@dolka.fr>  Tue, 03 Jan 2012 20:28:20 +0100
+
+l2tpns (2.2.1-1fdn2) unstable; urgency=low
+
+  * Add netlink support. Replace most ioctl().
+  * Use netlink to set up tun device.
+  * Make routset()/route6set() use netlink.
+  * Switch from masks to CIDR globally for IPv4.
+  * Use the source IP we use as BGP router identifier.
+  * Check for expired timers even when receiving no events.
+  * Better error handling on CLI initialization.
+  * Correctly set mp_epdis in host order.
+
+ -- Benjamin Cama <benoar@dolka.fr>  Thu, 15 Sep 2011 23:57:05 +0200
+
+l2tpns (2.2.1-1fdn1) unstable; urgency=low
+
+  * Version for FDN with features listed below
+  * Add RFC 4760 support
+  * Display session's remainging time in CLI.
+  * Remove no more used plugin function names; fixes a crash.
+  * Add an option to set source address for a BGP session.
+  * Wait before retrying on CEASE.
+  * Stop BGP session even when we are master
+  * Add a cli_bind_address configuration option.
+  * Add an "hostname" config option.
+  * Kill sessions receiving a ConfReq while closing.
+  * Add a config option to set the advertised BGP next hop.
+
+ -- Benjamin Cama <benoar@dolka.fr>  Fri, 29 Jul 2011 14:58:11 +0200
+
+l2tpns (2.2.1-1) unstable; urgency=low
+
+  * Updated to latest CVS to date (marked 2.2.x, after a 2.2.0 release, hence
+    this version number). 
+
+ -- Benjamin Cama <benoar@dolka.fr>  Thu, 28 Jul 2011 18:16:54 +0200
 
 l2tpns (2.1.21-1.1) unstable; urgency=low
 

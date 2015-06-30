@@ -1,9 +1,6 @@
 // L2TPNS Command Line Interface
 // vim: sw=8 ts=8
 
-char const *cvs_name = "$Name:  $";
-char const *cvs_id_cli = "$Id: cli.c,v 1.71.4.1 2010-05-21 01:37:47 perlboy84 Exp $";
-
 #include <stdio.h>
 #include <stddef.h>
 #include <stdarg.h>
@@ -25,6 +22,7 @@ char const *cvs_id_cli = "$Id: cli.c,v 1.71.4.1 2010-05-21 01:37:47 perlboy84 Ex
 #include <netdb.h>
 #include <libcli.h>
 
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "constants.h"
 #include "util.h"
@@ -34,11 +32,14 @@ char const *cvs_id_cli = "$Id: cli.c,v 1.71.4.1 2010-05-21 01:37:47 perlboy84 Ex
 #ifdef BGP
 #include "bgp.h"
 #endif
+#include "l2tplac.h"
 
+#define MAX_POOL_COUNT 65536
 extern tunnelt *tunnel;
+extern bundlet *bundle;
 extern sessiont *session;
 extern radiust *radius;
-extern ippoolt *ip_address_pool[256][256];
+extern ippoolt *ip_address_pool[MAX_POOL_COUNT];
 extern struct Tstats *_statistics;
 static struct cli_def *cli = NULL;
 extern configt *config;
@@ -101,6 +102,8 @@ static int cmd_remove_plugin(struct cli_def *cli, const char *command, char **ar
 static int cmd_uptime(struct cli_def *cli, const char *command, char **argv, int argc);
 static int cmd_shutdown(struct cli_def *cli, const char *command, char **argv, int argc);
 static int cmd_reload(struct cli_def *cli, const char *command, char **argv, int argc);
+static int cmd_setforward(struct cli_def *cli, const char *command, char **argv, int argc);
+static int cmd_show_rmtlnsconf(struct cli_def *cli, const char *command, char **argv, int argc);
 
 static int cmd_load_ip_pool(struct cli_def *cli, const char *command, char **argv, int argc);
 static int cmd_add_ip_pool(struct cli_def *cli, const char *command, char **argv, int argc);
@@ -140,8 +143,6 @@ void init_cli(char *hostname)
 	char buf[4096];
 	struct cli_command *c;
 	struct cli_command *c2;
-	int on = 1;
-	struct sockaddr_in addr;
 
 	cli = cli_init();
 	if (hostname && *hostname)
@@ -160,6 +161,7 @@ void init_cli(char *hostname)
 	cli_register_command(cli, c, "pool", cmd_show_pool, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, "Show the IP address allocation pool");
 	cli_register_command(cli, c, "radius", cmd_show_radius, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, "Show active radius queries");
 	cli_register_command(cli, c, "running-config", cmd_show_run, PRIVILEGE_PRIVILEGED, MODE_EXEC, "Show the currently running configuration");
+	cli_register_command(cli, c, "remotelns-conf", cmd_show_rmtlnsconf, PRIVILEGE_PRIVILEGED, MODE_EXEC, "Show a list of remote LNS configuration");
 	cli_register_command(cli, c, "session", cmd_show_session, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, "Show a list of sessions or details for a single session");
 	cli_register_command(cli, c, "tbf", cmd_show_tbf, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, "List all token bucket filters in use");
 	cli_register_command(cli, c, "throttle", cmd_show_throttle, PRIVILEGE_UNPRIVILEGED, MODE_EXEC, "List all throttled sessions and associated TBFs");
@@ -233,7 +235,10 @@ void init_cli(char *hostname)
 
 	c = cli_register_command(cli, NULL, "remove", NULL, PRIVILEGE_PRIVILEGED, MODE_CONFIG, NULL);
 	cli_register_command(cli, c, "plugin", cmd_remove_plugin, PRIVILEGE_PRIVILEGED, MODE_CONFIG, "Remove a plugin");
+
 	cli_register_command(cli, NULL, "set", cmd_set, PRIVILEGE_PRIVILEGED, MODE_CONFIG, "Set a configuration variable");
+
+	cli_register_command(cli, NULL, "setforward", cmd_setforward, PRIVILEGE_PRIVILEGED, MODE_CONFIG, "Set the Remote LNS Forward");
 
 	c = cli_register_command(cli, NULL, "ip", NULL, PRIVILEGE_PRIVILEGED, MODE_CONFIG, NULL);
 	cli_register_command(cli, c, "access-list", cmd_ip_access_list, PRIVILEGE_PRIVILEGED, MODE_CONFIG, "Add named access-list");
@@ -276,6 +281,17 @@ void init_cli(char *hostname)
 		}
 		fclose(f);
 	}
+}
+
+void cli_init_complete(char *hostname)
+{
+	int on = 1;
+	struct sockaddr_in addr;
+
+	if (hostname && *hostname)
+		cli_set_hostname(cli, hostname);
+	else
+		cli_set_hostname(cli, "l2tpns");
 
 	memset(&addr, 0, sizeof(addr));
 	clifd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -287,13 +303,22 @@ void init_cli(char *hostname)
 		fcntl(clifd, F_SETFL, flags | O_NONBLOCK);
 	}
 	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = config->cli_bind_address; /* defaults to INADDR_ANY */
 	addr.sin_port = htons(23);
 	if (bind(clifd, (void *) &addr, sizeof(addr)) < 0)
 	{
-		LOG(0, 0, 0, "Error listening on cli port 23: %s\n", strerror(errno));
+		LOG(0, 0, 0, "Error binding cli on port 23: %s\n", strerror(errno));
+		close(clifd);
+		clifd = -1;
 		return;
 	}
-	listen(clifd, 10);
+	if (listen(clifd, 10) < 0)
+	{
+		LOG(0, 0, 0, "Error listening on cli port 23: %s\n", strerror(errno));
+		close(clifd);
+		clifd = -1;
+		return;
+	}
 }
 
 void cli_do(int sockfd)
@@ -447,6 +472,14 @@ static int cmd_show_session(struct cli_def *cli, const char *command, char **arg
 			if (session[s].idle_timeout)
 				cli_print(cli, "\tIdle Timeout:\t%u seconds", session[s].idle_timeout - (session[s].last_data ? abs(time_now - session[s].last_data) : 0));
 
+			if (session[s].timeout)
+			{
+				cli_print(cli, "\tRemaining time:\t%u",
+					(session[s].bundle && bundle[session[s].bundle].num_of_links > 1)
+					? (unsigned) (session[s].timeout - bundle[session[s].bundle].online_time)
+					: (unsigned) (session[s].timeout - (time_now - session[s].opened)));
+			}
+
 			cli_print(cli, "\tBytes In/Out:\t%u/%u", session[s].cout, session[s].cin);
 			cli_print(cli, "\tPkts In/Out:\t%u/%u", session[s].pout, session[s].pin);
 			cli_print(cli, "\tMRU:\t\t%d", session[s].mru);
@@ -467,14 +500,14 @@ static int cmd_show_session(struct cli_def *cli, const char *command, char **arg
                           cli_print(cli, "\tWalled Garden Name:\t%s", session[s].walled_garden_name);
                         }
 			//Handle IP-Pools
-			if (session[s].pool_id[0] == 0 || session[s].pool_id[1] == 0)
+			if (session[s].pool_id == 0)
 			{
                           cli_print(cli, "\tIP Pool:\tWalled Garden Name:\t%s", session[s].walled_garden_name);
-			} else if (0 == ip_address_pool[(uint8_t)session[s].pool_id[0]][(uint8_t)session[s].pool_id[1]])
+			} else if (0 == ip_address_pool[(uint8_t)session[s].pool_id])
 			{
-			  cli_print(cli, "\tIP Pool:\tDefault (Requested %d.%d)", session[s].pool_id[0], session[s].pool_id[1]);
+			  cli_print(cli, "\tIP Pool:\tDefault (Requested %d)", session[s].pool_id);
 			} else {
-			  cli_print(cli, "\tIP Pool:\t%d.%d", session[s].pool_id[0], session[s].pool_id[1]);
+			  cli_print(cli, "\tIP Pool:\t%d", session[s].pool_id);
 			}
 
 			{
@@ -529,8 +562,9 @@ static int cmd_show_session(struct cli_def *cli, const char *command, char **arg
 	}
 
 	// Show Summary
-	cli_print(cli, "%5s %4s %-32s %-15s %s %s %s %s %10s %10s %10s %4s %-15s %s",
+	cli_print(cli, "%5s %7s %4s %-32s %-15s %s %s %s %s %10s %10s %10s %4s %10s %-18s %s",
 			"SID",
+			"LkToSID",
 			"TID",
 			"Username",
 			"IP",
@@ -542,14 +576,21 @@ static int cmd_show_session(struct cli_def *cli, const char *command, char **arg
 			"downloaded",
 			"uploaded",
 			"idle",
-			"LAC",
+			"Rem.Time",
+			"LAC(L)/RLNS(R)/PPPOE(P)",
 			"CLI");
 
 	for (i = 1; i < MAXSESSION; i++)
 	{
+		uint32_t rem_time;
 		if (!session[i].opened) continue;
-		cli_print(cli, "%5d %4d %-32s %-15s %s %s %s %s %10u %10lu %10lu %4u %-15s %s",
+		if (session[i].bundle && bundle[session[i].bundle].num_of_links > 1)
+			rem_time = session[i].timeout ? (session[i].timeout - bundle[session[i].bundle].online_time) : 0;
+		else
+			rem_time = session[i].timeout ? (session[i].timeout - (time_now-session[i].opened)) : 0;
+		cli_print(cli, "%5d %7d %4d %-32s %-15s %s %s %s %s %10u %10lu %10lu %4u %10lu %3s%-20s %s",
 				i,
+				session[i].forwardtosession,
 				session[i].tunnel,
 				session[i].user[0] ? session[i].user : "*",
 				fmtaddr(htonl(session[i].ip), 0),
@@ -561,7 +602,9 @@ static int cmd_show_session(struct cli_def *cli, const char *command, char **arg
 				(unsigned long)session[i].cout,
 				(unsigned long)session[i].cin,
 				abs(time_now - (session[i].last_packet ? session[i].last_packet : time_now)),
-				fmtaddr(htonl(tunnel[ session[i].tunnel ].ip), 1),
+				(unsigned long)(rem_time),
+				(session[i].tunnel == TUNNEL_ID_PPPOE)?"(P)":(tunnel[session[i].tunnel].isremotelns?"(R)":"(L)"),
+				(session[i].tunnel == TUNNEL_ID_PPPOE)?fmtMacAddr(session[i].src_hwaddr):fmtaddr(htonl(tunnel[session[i].tunnel].ip), 1),
 				session[i].calling[0] ? session[i].calling : "*");
 	}
 	return CLI_OK;
@@ -645,12 +688,14 @@ static int cmd_show_tunnels(struct cli_def *cli, const char *command, char **arg
 		if (!show_all && (!tunnel[i].ip || tunnel[i].die)) continue;
 
 		for (x = 0; x < MAXSESSION; x++) if (session[x].tunnel == i && session[x].opened && !session[x].die) sessions++;
-		cli_print(cli, "%4d %20s %20s %6s %6d",
+		cli_print(cli, "%4d %20s %20s %6s %6d %s",
 				i,
 				*tunnel[i].hostname ? tunnel[i].hostname : "(null)",
 				fmtaddr(htonl(tunnel[i].ip), 0),
 				states[tunnel[i].state],
-				sessions);
+				sessions
+				,(i == TUNNEL_ID_PPPOE)?"Tunnel pppoe":(tunnel[i].isremotelns?"Tunnel To Remote LNS":"Tunnel To LAC")
+				);
 	}
 
 	return CLI_OK;
@@ -713,7 +758,7 @@ static int cmd_show_counters(struct cli_def *cli, const char *command, char **ar
 			GET_STAT(tun_tx_bytes),
 			GET_STAT(tun_tx_packets),
 			GET_STAT(tun_tx_errors));
-	cli_print(cli, "");
+	cli_print(cli, " ");
 
 	cli_print(cli, "%-10s %10s %10s %10s %10s", "Tunnel", "Bytes", "Packets", "Errors", "Retries");
 	cli_print(cli, "%-10s %10u %10u %10u", "RX",
@@ -725,7 +770,7 @@ static int cmd_show_counters(struct cli_def *cli, const char *command, char **ar
 			GET_STAT(tunnel_tx_packets),
 			GET_STAT(tunnel_tx_errors),
 			GET_STAT(tunnel_retries));
-	cli_print(cli, "");
+	cli_print(cli, " ");
 
 	cli_print(cli, "%-30s%-10s", "Counter", "Value");
 	cli_print(cli, "-----------------------------------------");
@@ -792,7 +837,7 @@ static int cmd_show_counters(struct cli_def *cli, const char *command, char **ar
 		char *p = strchr(t, '\n');
 		if (p) *p = 0;
 
-		cli_print(cli, "");
+		cli_print(cli, " ");
 		cli_print(cli, "Last counter reset %s", t);
 	}
 
@@ -814,72 +859,10 @@ static int cmd_clear_counters(struct cli_def *cli, const char *command, char **a
 
 static int cmd_show_version(struct cli_def *cli, const char *command, char **argv, int argc)
 {
-	int tag = 0;
-	int file = 0;
-	int i = 0;
-
 	if (CLI_HELP_REQUESTED)
-		return cli_arg_help(cli, 1,
-			"tag", "Include CVS release tag",
-			"file", "Include file versions",
-			NULL);
-
-	for (i = 0; i < argc; i++)
-		if (!strcmp(argv[i], "tag"))
-			tag++;
-		else if (!strcmp(argv[i], "file"))
-			file++;
+		return CLI_HELP_NO_ARGS;
 
 	cli_print(cli, "L2TPNS %s", VERSION);
-	if (tag)
-	{
-		char const *p = strchr(cvs_name, ':');
-		char const *e;
-		if (p)
-		{
-			p++;
-			while (isspace(*p))
-				p++;
-		}
-
-		if (!p || *p == '$')
-			p = "HEAD";
-
-		e = strpbrk(p, " \t$");
-		cli_print(cli, "Tag: %.*s", (int) (e ? e - p + 1 : strlen(p)), p);
-	}
-	
-	if (file)
-	{
-		extern linked_list *loaded_plugins;
-		void *p;
-
-		cli_print(cli, "Files:");
-		cli_print(cli, "  %s", cvs_id_arp);
-#ifdef BGP
-		cli_print(cli, "  %s", cvs_id_bgp);
-#endif /* BGP */
-		cli_print(cli, "  %s", cvs_id_cli);
-		cli_print(cli, "  %s", cvs_id_cluster);
-		cli_print(cli, "  %s", cvs_id_constants);
-		cli_print(cli, "  %s", cvs_id_control);
-		cli_print(cli, "  %s", cvs_id_icmp);
-		cli_print(cli, "  %s", cvs_id_l2tpns);
-		cli_print(cli, "  %s", cvs_id_ll);
-		cli_print(cli, "  %s", cvs_id_ppp);
-		cli_print(cli, "  %s", cvs_id_radius);
-		cli_print(cli, "  %s", cvs_id_tbf);
-		cli_print(cli, "  %s", cvs_id_util);
-
-		ll_reset(loaded_plugins);
-		while ((p = ll_next(loaded_plugins)))
-		{
-			char const **id = dlsym(p, "cvs_id");
-			if (id)
-				cli_print(cli, "  %s", *id);
-		}
-	}
-
 	return CLI_OK;
 }
 
@@ -912,7 +895,7 @@ static int cmd_show_pool(struct cli_def *cli, const char *command, char **argv, 
 {
 	int i;
 	int used = 0, free = 0, show_all = 0, show_summary = 0;
-        int x,y;
+        int x;
 
 	if (!config->cluster_iam_master)
 	{
@@ -949,35 +932,34 @@ static int cmd_show_pool(struct cli_def *cli, const char *command, char **argv, 
 	{
 		cli_print(cli, "%-15s %4s %8s %s", "IP Address", "Used", "Session", "User");
 	}
-        for (x = 0; x < 256 ; x++)
+        for (x = 0; x < MAX_POOL_COUNT; x++)
         {
-                for (y = 0; y < 256 ; y++)
-                {
-                        if (ip_address_pool[x][y] == NULL) continue;
+                
+                        if (ip_address_pool[x] == NULL) 
+                                continue;
                         for (i = 0; i < MAXIPPOOL; i++)
                         {
 				if (show_summary && i > 0)
 				{
-					if (!ip_address_pool[x][y][i].address && ip_address_pool[x][y][i-1].address)
+					if (!ip_address_pool[x][i].address && ip_address_pool[x][i-1].address)
 					{
-						cli_print(cli, "%-15s - %-15s %d%d", fmtaddr(htonl(ip_address_pool[x][y][1].address),0),
-										   fmtaddr(htonl(ip_address_pool[x][y][i-1].address),1),
-										   x,y);
+						cli_print(cli, "%-15s - %-15s %d", fmtaddr(htonl(ip_address_pool[x][1].address),0),
+										   fmtaddr(htonl(ip_address_pool[x][i-1].address),1),
+										   x);
 					}
 				} 
 				else
 				{
-                          		display_pool(ip_address_pool[x][y][i],show_all,&used,&free);
+                          		display_pool(ip_address_pool[x][i],show_all,&used,&free);
 				}
                         }
-
-                }
         }
 
-	if (!show_all && !show_summary)
-		cli_print(cli, "(Not displaying unused addresses)");
-	if (!show_summary)
+	if (!show_summary) {
+                if (!show_all)
+			cli_print(cli, "(Not displaying unused addresses)");
 		cli_print(cli, "\r\nFree: %d\r\nUsed: %d", free, used);
+        }
 	return CLI_OK;
 }
 
@@ -1079,6 +1061,11 @@ static int cmd_show_run(struct cli_def *cli, const char *command, char **argv, i
 				h = BGP_HOLD_TIME;
 
 			cli_print(cli, " neighbour %s timers %d %d", config->neighbour[i].name, k, h);
+
+			if (config->neighbour[i].update_source.s_addr != INADDR_ANY)
+				cli_print(cli, " neighbour %s update-source %s",
+						config->neighbour[i].name,
+						inet_ntoa(config->neighbour[i].update_source));
 		}
 	}
 #endif
@@ -1351,6 +1338,11 @@ static int cmd_drop_session(struct cli_def *cli, const char *command, char **arg
 		}
 
 		if (session[s].ip && session[s].opened && !session[s].die)
+		{
+			cli_print(cli, "Dropping session %d", s);
+			cli_session_actions[s].action |= CLI_SESS_KILL;
+		}
+		else if (session[s].forwardtosession && session[s].opened && !session[s].die)
 		{
 			cli_print(cli, "Dropping session %d", s);
 			cli_session_actions[s].action |= CLI_SESS_KILL;
@@ -1823,8 +1815,7 @@ static int cmd_remove_plugin(struct cli_def *cli, const char *command, char **ar
 
 static int cmd_add_ip_pool(struct cli_def *cli, const char *command, char **argv, int argc)
 {
-	uint8_t x = 0;
-	uint8_t y = 0;
+	uint16_t x = 0;
 	
 	if (CLI_HELP_REQUESTED)
 		return cli_arg_help(cli, argc > 2, "IP-RANGE", "IP or network to add", "IP-POOL", "Name of IP pool (or 'default')", NULL);
@@ -1836,25 +1827,24 @@ static int cmd_add_ip_pool(struct cli_def *cli, const char *command, char **argv
 	}
 
 	if (strcmp(argv[1], "default") != 0) {
-		x = argv[1][0];
-		y = argv[1][1];
-		cli_print(cli,"Adding %s to pool %s.", argv[0], argv[1]);
+		x = (uint16_t) atoi(argv[1]);
+		cli_print(cli,"Adding %s to pool %d.", argv[0], x);
 	} else {
 		cli_print(cli,"Adding %s to the default pool.", argv[0]);
 	}
 
-	add_ip_range(argv[0], x, y);
+	add_ip_range(argv[0], x);
 	
-	if (ip_address_pool[x][y] == NULL)
+	if (ip_address_pool[x] == NULL)
 	{
-		cli_error(cli, "Unable to add to IP Pool %d.%d. Check that it exists.", x, y);
+		cli_error(cli, "Unable to add to IP Pool %d. Check that it exists.", x);
 		return CLI_OK;
 	}
 
 	rebuild_address_pool();
 
 	if (strcmp(argv[1], "default") != 0)
-		cli_print(cli, "Range added. Please remember to add it to the config file /etc/l2tpns/ip_pool.%d.%d", x,y);
+		cli_print(cli, "Range added. Please remember to add it to the config file /etc/l2tpns/ip_pool.%d", x);
 	else
 		cli_print(cli, "Range added. Please remember to add it to the config file /etc/l2tpns/ip_pool");
 	return CLI_OK;
@@ -1862,7 +1852,10 @@ static int cmd_add_ip_pool(struct cli_def *cli, const char *command, char **argv
 
 static int cmd_load_ip_pool(struct cli_def *cli, const char *command, char **argv, int argc)
 {
-	uint8_t x,y,i = 0;
+	uint16_t x = 0;
+#ifdef BGP
+	int i;
+#endif
 
 	if (CLI_HELP_REQUESTED)
 		return cli_arg_help(cli, argc > 1,
@@ -1874,21 +1867,20 @@ static int cmd_load_ip_pool(struct cli_def *cli, const char *command, char **arg
 		return CLI_OK;
 	}
 
-	x = (uint8_t) atoi(argv[0]);
-	y = (uint8_t) atoi(argv[1]);
+	x = (uint16_t) atoi(argv[0]);
 
-	if (ip_address_pool[x][y] != 0)
+	if (ip_address_pool[x] != 0)
 	{
-		cli_error(cli, "IP Pool %d.%d is already loaded", x, y);
+		cli_error(cli, "IP Pool %d is already loaded", x);
 		return CLI_OK;
 	}
 
 	//Add the IP Pool
-	initippool(x,y);
+	initippool(x);
 
-	if (ip_address_pool[x][y] == NULL)
+	if (ip_address_pool[x] == NULL)
 	{
-		cli_error(cli, "Unable to load IP Pool %d.%d. Check that it exists on the filesystem.", x, y);
+		cli_error(cli, "Unable to load IP Pool %d. Check that it exists on the filesystem.", x);
 		return CLI_OK;
 	}
 
@@ -1958,9 +1950,8 @@ static int cmd_uptime(struct cli_def *cli, const char *command, char **argv, int
 		return CLI_HELP_NO_ARGS;
 
 	fh = fopen("/proc/loadavg", "r");
-	if (fgets(buf, 100, fh) == NULL) {
-		return CLI_OK;
-	}
+	p = fgets(buf, 100, fh);
+	if (p == NULL) return CLI_OK;
 	fclose(fh);
 
 	for (i = 0; i < 3; i++)
@@ -2307,6 +2298,7 @@ static int cmd_router_bgp_neighbour(struct cli_def *cli, const char *command, ch
 			return cli_arg_help(cli, 0,
 				"remote-as", "Set remote autonomous system number",
 				"timers",    "Set timers",
+				"update-source",    "Set source address to use for the BGP session",
 				NULL);
 
 		default:
@@ -2324,6 +2316,9 @@ static int cmd_router_bgp_neighbour(struct cli_def *cli, const char *command, ch
 				if (argc == 5 && !argv[4][1])
 					return cli_arg_help(cli, 1, NULL);
 			}
+
+			if (MATCH("update-source", argv[1]))
+				return cli_arg_help(cli, argc > 3, "A.B.C.D", "Source IP address", NULL);
 
 			return CLI_OK;
 		}
@@ -2361,9 +2356,30 @@ static int cmd_router_bgp_neighbour(struct cli_def *cli, const char *command, ch
 			snprintf(config->neighbour[i].name, sizeof(config->neighbour[i].name), "%s", argv[0]);
 			config->neighbour[i].keepalive = -1;
 			config->neighbour[i].hold = -1;
+			config->neighbour[i].update_source.s_addr = INADDR_ANY;
 		}
 
 		config->neighbour[i].as = as;
+		return CLI_OK;
+	}
+
+	if (MATCH("update-source", argv[1]))
+	{
+		struct in_addr addr;
+
+		if (!config->neighbour[i].name[0])
+		{
+			cli_error(cli, "Specify remote-as first");
+			return CLI_OK;
+		}
+
+		if (!inet_aton(argv[2], &addr))
+		{
+			cli_error(cli, "Cannot parse IP \"%s\"", argv[2]);
+			return CLI_OK;
+		}
+
+		config->neighbour[i].update_source = addr;
 		return CLI_OK;
 	}
 
@@ -2470,7 +2486,7 @@ static int cmd_show_bgp(struct cli_def *cli, const char *command, char **argv, i
 
 		if (!hdr++)
 		{
-			cli_print(cli, "");
+			cli_print(cli, " ");
 			cli_print(cli, "Peer                  AS         Address "
 			    "State       Retries Retry in Route Pend    Timers");
 			cli_print(cli, "------------------ ----- --------------- "
@@ -3322,7 +3338,7 @@ static int cmd_show_access_list(struct cli_def *cli, const char *command, char *
 		}
 
 		if (i)
-			cli_print(cli, "");
+			cli_print(cli, " ");
 
 		cli_print(cli, "%s IP access list %s",
 			ip_filters[f].extended ? "Extended" : "Standard",
@@ -3357,5 +3373,76 @@ static int cmd_reload(struct cli_def *cli, const char *command, char **argv, int
 		return CLI_HELP_NO_ARGS;
 
 	kill(getppid(), SIGHUP);
+	return CLI_OK;
+}
+
+static int cmd_setforward(struct cli_def *cli, const char *command, char **argv, int argc)
+{
+	int ret;
+
+	if (CLI_HELP_REQUESTED)
+	{
+		switch (argc)
+		{
+		case 1:
+			return cli_arg_help(cli, 0,
+				"MASK", "Users mask to forward (ex: myISP@operator.com)", NULL);
+
+		case 2:
+			return cli_arg_help(cli, 0,
+				"IP", "IP of the remote LNS(ex: 64.64.64.64)", NULL);
+
+		case 3:
+			return cli_arg_help(cli, 0,
+				"PORT", "Port of the remote LNS (ex: 1701)", NULL);
+
+		case 4:
+			return cli_arg_help(cli, 0,
+				"SECRET", "l2tp secret of the remote LNS (ex: mysecretpsw)", NULL);
+
+		default:
+			return cli_arg_help(cli, argc > 1, NULL);
+		}
+	}
+
+	if (argc != 4)
+	{
+		cli_error(cli, "Specify variable and value");
+		return CLI_OK;
+	}
+
+	// lac_addremotelns(mask, IP_RemoteLNS, Port_RemoteLNS, SecretRemoteLNS)
+	ret = lac_addremotelns(argv[0], argv[1], argv[2], argv[3]);
+
+	if (ret)
+	{
+		cli_print(cli, "setforward %s %s %s %s", argv[0], argv[1], argv[2], argv[3]);
+		if (ret == 2)
+			cli_print(cli, "%s Updated, the tunnel must be dropped", argv[0]);
+	}
+	else
+		cli_error(cli, "ERROR setforward %s %s %s %s", argv[0], argv[1], argv[2], argv[3]);
+
+	return CLI_OK;
+}
+
+static int cmd_show_rmtlnsconf(struct cli_def *cli, const char *command, char **argv, int argc)
+{
+	confrlnsidt idrlns;
+	char strdisp[1024];
+
+	if (CLI_HELP_REQUESTED)
+	{
+		return cli_arg_help(cli, 0, "remotelns-conf", "Show a list of remote LNS configurations", NULL);
+	}
+
+	for (idrlns = 0; idrlns < MAXRLNSTUNNEL; idrlns++)
+	{
+		if (lac_cli_show_remotelns(idrlns, strdisp) != 0)
+			cli_print(cli, "%s", strdisp);
+		else
+			break;
+	}
+
 	return CLI_OK;
 }

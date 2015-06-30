@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <netinet/ip6.h>
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "plugin.h"
 #include "control.h"
@@ -35,8 +37,7 @@ char *down_commands[] = {
     "/sbin/iptables -t nat -X %s_users",
     "/sbin/iptables -t nat -F %s",
     "/sbin/iptables -t nat -X %s",
-    // Not sure if this is valid anymore.  Commenting this out.
-    // "rmmod iptable_nat",	// Should also remove ip_conntrack, but
+    "rmmod iptable_nat",	// Should also remove ip_conntrack, but
 				// doing so can take hours...  literally.
 				// If a master is re-started as a slave,
 				// either rmmod manually, or reboot.

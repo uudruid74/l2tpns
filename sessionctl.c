@@ -1,11 +1,11 @@
 #include <string.h>
+#include <netinet/ip6.h>
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "plugin.h"
 #include "control.h"
 
 /* session control */
-
-char const *cvs_id = "$Id: sessionctl.c,v 1.5 2006-04-13 11:14:35 bodea Exp $";
 
 int plugin_api_version = PLUGIN_API_VERSION;
 static struct pluginfuncs *f = 0;

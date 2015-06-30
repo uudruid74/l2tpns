@@ -1,7 +1,5 @@
 // L2TPNS: constants
 
-char const *cvs_id_constants = "$Id: constants.c,v 1.7 2005-07-31 10:04:10 bodea Exp $";
-
 #include <stdio.h>
 #include "constants.h"
 
@@ -11,7 +9,7 @@ char const *cvs_id_constants = "$Id: constants.c,v 1.7 2005-07-31 10:04:10 bodea
     }; \
     char const *table(int index) \
     { \
-	static char n[16]; \
+	static char n[80]; \
 	if (index >= 0 && index < sizeof(table ## s) / sizeof(table ## s[0]) \
 	    && table ## s[index]) \
 		return table ## s[index]; \
@@ -187,7 +185,29 @@ CONSTANT(ppp_lcp_option,
     "Magic-Number",					// 5
     0,							// 6
     "Protocol-Field-Compression",			// 7
-    "Address-and-Control-Field-Compression"		// 8
+    "Address-and-Control-Field-Compression",		// 8
+    "FCS Alternatives",
+    "Self Describing Pad",
+    "Numbered Mode",
+    "Identification",
+    "Callback",
+    "Connect-Time (deprecated)",
+    "Compound Frames (deprecated)",
+    "Nominal-Data-Encap (deprecated)",
+    "MRRU",
+    "MSSN Header Format",
+    "Multilink Endpoint Discriminator",
+    "Proprietary",
+    "DCE Ident",
+    "MP+ Procedure Option",
+    "Link Discrim for BACP",
+    "LCP Auth Option",
+    "COBS",
+    "Prefix Elision",
+    "Multilink Header Format",
+    "I18n",
+    "Simple data link on SONET/SDH",
+    "Reserved?"
 )
 
 CONSTANT(radius_state,

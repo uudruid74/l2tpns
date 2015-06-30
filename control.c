@@ -1,8 +1,8 @@
 // L2TPNS: control
 
-char const *cvs_id_control = "$Id: control.c,v 1.5 2005-07-31 10:04:10 bodea Exp $";
-
 #include <string.h>
+#include <netinet/ip6.h>
+#include "dhcp6.h"
 #include "l2tpns.h"
 #include "control.h"
 

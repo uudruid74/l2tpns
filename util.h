@@ -2,6 +2,7 @@
 #define __UTIL_H__
 
 char *fmtaddr(in_addr_t addr, int n);
+char *fmtMacAddr(uint8_t *pMacAddr);
 void *shared_malloc(unsigned int size);
 void shared_free(void *p, unsigned int size);
 

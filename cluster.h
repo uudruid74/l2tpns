@@ -1,5 +1,4 @@
 // L2TPNS Clustering Stuff
-// $Id: cluster.h,v 1.14.4.1 2010-05-21 01:37:47 perlboy84 Exp $
 
 #ifndef __CLUSTER_H__
 #define __CLUSTER_H__
@@ -23,8 +22,10 @@
 #define C_FORWARD_DAE		16	// A DAE packet for the master to handle
 #define C_BUNDLE		17	// Bundle structure.
 #define C_CBUNDLE		18	// Compressed bundle structure.
+#define C_MPPP_FORWARD	19	// MPPP Forwarded packet..
+#define C_PPPOE_FORWARD	20	// PPPOE Forwarded packet..
 
-#define HB_VERSION		6	// Protocol version number..
+#define HB_VERSION		9	// Protocol version number..
 #define HB_MAX_SEQ		(1<<30)	// Maximum sequence number. (MUST BE A POWER OF 2!)
 #define HB_HISTORY_SIZE		64	// How many old heartbeats we remember?? (Must be a factor of HB_MAX_SEQ)
 
@@ -80,15 +81,17 @@ int processcluster(uint8_t *buf, int size, in_addr_t addr);
 int cluster_send_session(int sid);
 int cluster_send_bundle(int bid);
 int cluster_send_tunnel(int tid);
-int master_forward_packet(uint8_t *data, int size, in_addr_t addr, int port);
+int master_forward_packet(uint8_t *data, int size, in_addr_t addr, uint16_t port, uint16_t indexudp);
 int master_forward_dae_packet(uint8_t *data, int size, in_addr_t addr, int port);
 int master_throttle_packet(int tid, uint8_t *data, int size);
 int master_garden_packet(sessionidt s, uint8_t *data, int size);
+int master_forward_mppp_packet(sessionidt s, uint8_t *data, int size);
 void master_update_counts(void);
 void cluster_send_ping(time_t basetime);
 void cluster_heartbeat(void);
 void cluster_check_master(void);
 void cluster_check_slaves(void);
 int cmd_show_cluster(struct cli_def *cli, const char *command, char **argv, int argc);
+int master_forward_pppoe_packet(uint8_t *data, int size, uint8_t codepad);
 
 #endif /* __CLUSTER_H__ */
