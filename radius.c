@@ -554,7 +554,8 @@ void processrad(uint8_t *buf, int len, char socket_index)
 	r_id = buf[1]; // radius reply indentifier.
 
 	len = ntohs(*(uint16_t *) (buf + 2));
-	r = socket_index | (r_id << RADIUS_SHIFT);
+//	r = socket_index | (r_id << RADIUS_SHIFT);
+	r = RAD_RID(r_id,socket_index);
 	s = radius[r].session;
 	LOG(3, s, session[s].tunnel, "Received %s, RADIUS %d response for session %u (%s, id %d)\n",
 			radius_state(radius[r].state), r, s, radius_code(r_code), r_id);

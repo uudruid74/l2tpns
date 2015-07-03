@@ -116,7 +116,7 @@ void processpap(sessionidt s, tunnelidt t, uint8_t *p, uint16_t l)
 	{
 		// respond now, either no RADIUS available or already authenticated
 		uint8_t b[MAXETHER];
-		radius[r].id = p[1];
+		uint8_t id = p[1];
 		uint8_t *p = makeppp(b, sizeof(b), 0, 0, s, t, PPPPAP, 0, 0, 0);
 		if (!p) return;
 
@@ -124,7 +124,7 @@ void processpap(sessionidt s, tunnelidt t, uint8_t *p, uint16_t l)
 			*p = 2;				// ACK
 		else
 			*p = 3;				// cant authorise
-		p[1] = radius[r].id;
+		p[1] = id;
 		*(uint16_t *) (p + 2) = htons(5);	// length
 		p[4] = 0;				// no message
 		tunnelsend(b, 5 + (p - b), t);		// send it
