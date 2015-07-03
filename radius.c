@@ -194,7 +194,7 @@ void radiussend(uint16_t r, uint8_t state)
 	radius[r].retry = backoff(radius[r].try++) + 20; // 3s, 4s, 6s, 10s...
 	LOG(4, s, session[s].tunnel, "Send RADIUS id %d sock %d state %s try %d\n",
 //		r >> RADIUS_SHIFT, r & RADIUS_MASK,
-	RAD_SOCK(r) + radius[r].try, RAD_SOCK(r),
+	RAD_ID(r) + radius[r].try, RAD_SOCK(r),
 	radius_state(radius[r].state), radius[r].try);
 
 //	if (radius[r].try > config->numradiusservers * 2)
@@ -555,11 +555,11 @@ void processrad(uint8_t *buf, int len, char socket_index)
 
 	len = ntohs(*(uint16_t *) (buf + 2));
 //	r = socket_index | (r_id << RADIUS_SHIFT);
-	r = RAD_RID(r_id,socket_index);
+	r = RAD_RID(r_id,socket_index); // ekl
+
 	s = radius[r].session;
 	LOG(3, s, session[s].tunnel, "Received %s, RADIUS %d response for session %u (%s, id %d)\n",
 			radius_state(radius[r].state), r, s, radius_code(r_code), r_id);
-
 	if (!s && radius[r].state != RADIUSSTOP)
 	{
 		LOG(1, s, session[s].tunnel, "   Unexpected RADIUS response\n");
