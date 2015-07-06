@@ -36,7 +36,7 @@
 //#define RAD_ID(x)	((x) >> (RADIUS_SHIFT-2))
 #define RAD_SOCK(x)	(((x) & RADIUS_MASK) & 0xFF)
 #define RAD_ID(x)	((RAD_SOCK(x)&0x3F) << 2)
-#define RAD_RID(responseid,socket)	((socket)|((socket & 0x3F)<<RADIUS_SHIFT))
+#define RAD_RID(responseid,socket)	((socket)|((socket & 0x3F)<<(RADIUS_SHIFT+2)))
 
 #define T_UNDEF		(0xffff)	// A tunnel ID that won't ever be used. Mark session as undefined.
 #define T_FREE		(0)		// A tunnel ID that won't ever be used. Mark session as free.
