@@ -52,25 +52,29 @@ uint8_t reserveRadiusID(uint16_t index)
 	int i;
 	static int lastid = 0;
 
-	for (i=0; i<256; i++) {
+	for (i=1; i<256; i++) {
 		uint8_t found = (lastid+i)%256;
-		if (0 == radTable[index].timestamp) {
+		if (0 == radTable[found].timestamp) {
 			lastid = found;
 			radTable[found].timestamp = TIME;
 			radTable[found].radiusIndex = index;
+			LOG(3,0,0,"Assigning RADIUS %d for index %d at time %d\n",
+				(int) found, (int) index, TIME);
 			return found;
 		}
-		else if (radTable[index].timestamp + 1200 < TIME) {
+		else if (radTable[found].timestamp + 1200 < TIME) {
 			// This is old, mark it as available, but
 			// don't use it just yet.  This will wait until
 			// we search all the way back around the table
 			radTable[found].timestamp = 0;
+			LOG(3,0,0,"Timeout Recovery of RADIUS %d\n", (int) found);
 		}
 	}
 	// Not found!  Fallback is steal one!
 	lastid = (lastid+1)%256;
 	radTable[lastid].timestamp = TIME;
 	radTable[lastid].radiusIndex = index;
+	LOG(3,0,0,"Fallback: Stealing Radius %d for index %d\n", lastid, index);
 	return (uint8_t) lastid;
 }
 
@@ -78,6 +82,7 @@ uint16_t releaseRadiusID(uint8_t radiusId)
 {
 	uint16_t index = radTable[radiusId].radiusIndex;
 	radTable[radiusId].timestamp = 0;
+	LOG(3,0,0,"Releasing radius %d from index %d\n", radiusId, index);
 	return index;
 }
 

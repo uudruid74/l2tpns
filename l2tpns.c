@@ -2193,7 +2193,7 @@ void sessionshutdown(sessionidt s, char const *reason, int cdn_result, int cdn_e
 		if (*config->accounting_dir && shut_acct_n < sizeof(shut_acct) / sizeof(*shut_acct))
 			memcpy(&shut_acct[shut_acct_n++], &session[s], sizeof(session[s]));
 	} 
-	else LOG(1, s, session[s].tunnel, "EKL: Not sending radius stop\n");
+	else LOG(5, s, session[s].tunnel, "EKL: Not sending radius stop\n");
 
 	#ifdef ISEEK_CONTROL_MESSAGE
 	    LOG(1, s, session[s].tunnel, "iseek-control-message logout %s %d/%d %s\n", session[s].user, session[s].tx_connect_speed, session[s].rx_connect_speed, fmtaddr(htonl(session[s].ip), 0));
@@ -3655,7 +3655,7 @@ static void regular_cleanups(double period)
 	else if (s_slice > config->cluster_highest_sessionid)
 	    s_slice = config->cluster_highest_sessionid;
 
-	LOG(4, 0, 0, "Begin regular cleanup (last %f seconds ago)\n", period);
+	LOG(5, 0, 0, "Begin regular cleanup (last %f seconds ago)\n", period);
 
 	for (i = 0; i < t_slice; i++)
 	{
@@ -4035,7 +4035,7 @@ static void regular_cleanups(double period)
 		}
 	}
 
-	LOG(4, 0, 0, "End regular cleanup: checked %d/%d/%d tunnels/radius/sessions; %d/%d/%d actions\n",
+	LOG(5, 0, 0, "End regular cleanup: checked %d/%d/%d tunnels/radius/sessions; %d/%d/%d actions\n",
 		t_slice, r_slice, s_slice, t_actions, r_actions, s_actions);
 }
 
