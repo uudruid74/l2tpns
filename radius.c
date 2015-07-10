@@ -32,6 +32,55 @@ extern ip_filtert *ip_filters;
 
 static const hasht zero;
 
+// This structure and the following 3 functions are to map the radius
+// radius ID in a packet to the underlying control structures on a
+// transaction basis.  The radius ID numbers are not re-used per 
+// connection or per user, but only to track packets in transmit.  This
+// means you can have up to 256 pending transactions - EKL
+
+static struct RadiusIdReservations {
+	uint16_t radiusIndex;
+	clockt   timestamp;
+} radTable[256];
+
+void initRadTranslateTable() {
+	memset(radTable, 0, sizeof radTable);
+}
+
+uint8_t reserveRadiusID(uint16_t index)
+{
+	int i;
+	static int lastid = 0;
+
+	for (i=0; i<256; i++) {
+		uint8_t found = (lastid+i)%256;
+		if (0 == radTable[index].timestamp) {
+			lastid = found;
+			radTable[found].timestamp = TIME;
+			radTable[found].radiusIndex = index;
+			return found;
+		}
+		else if (radTable[index].timestamp + 1200 < TIME) {
+			// This is old, mark it as available, but
+			// don't use it just yet.  This will wait until
+			// we search all the way back around the table
+			radTable[found].timestamp = 0;
+		}
+	}
+	// Not found!  Fallback is steal one!
+	lastid = (lastid+1)%256;
+	radTable[lastid].timestamp = TIME;
+	radTable[lastid].radiusIndex = index;
+	return (uint8_t) lastid;
+}
+
+uint16_t releaseRadiusID(uint8_t radiusId)
+{
+	uint16_t index = radTable[radiusId].radiusIndex;
+	radTable[radiusId].timestamp = 0;
+	return index;
+}
+
 static void calc_auth(const void *buf, size_t len, const uint8_t *in, uint8_t *out)
 {
 	MD5_CTX ctx;
@@ -67,6 +116,7 @@ void initrad(void)
 		inc = -1;
 	}
 
+	initRadTranslateTable();
 	LOG(3, 0, 0, "Creating %d sockets for RADIUS queries\n", RADIUS_FDS);
 	radfds = calloc(sizeof(int), RADIUS_FDS);
 	for (i = 0; i < RADIUS_FDS; i++)
@@ -164,11 +214,14 @@ void radiussend(uint16_t r, uint8_t state)
 	char pass[129];
 	int pl;
 	uint8_t *p;
+	uint8_t radiusID;
 	sessionidt s;
 
 	CSTAT(radiussend);
 
 	s = radius[r].session;
+	radiusID = reserveRadiusID(r); // EKL
+
 	if (!config->numradiusservers)
 	{
 		LOG(0, s, session[s].tunnel, "No RADIUS servers\n");
@@ -193,12 +246,11 @@ void radiussend(uint16_t r, uint8_t state)
 	radius[r].state = state;
 	radius[r].retry = backoff(radius[r].try++) + 20; // 3s, 4s, 6s, 10s...
 	LOG(4, s, session[s].tunnel, "Send RADIUS id %d sock %d state %s try %d\n",
+		radiusID, r & RADIUS_MASK, // EKL
 //		r >> RADIUS_SHIFT, r & RADIUS_MASK,
-	RAD_ID(r) + radius[r].try, RAD_SOCK(r),
-	radius_state(radius[r].state), radius[r].try);
+		radius_state(radius[r].state), radius[r].try);
 
-//	if (radius[r].try > config->numradiusservers * 2)
-	if (radius[r].try > 3)  // 3 sounds better
+	if (radius[r].try > config->numradiusservers * 2)
 	{
 		if (s)
 		{
@@ -235,7 +287,8 @@ void radiussend(uint16_t r, uint8_t state)
 		default:
 			LOG(0, 0, 0, "Unknown radius state %d\n", state);
 	}
-	b[1] = RAD_ID(r) + radius[r].try;       // identifier
+	b[1] = radiusID; // EKL
+//	b[1] = r >> RADIUS_SHIFT;       // identifier
 	memcpy(b + 4, radius[r].auth, 16);
 
 	p = b + 20;
@@ -554,12 +607,12 @@ void processrad(uint8_t *buf, int len, char socket_index)
 	r_id = buf[1]; // radius reply indentifier.
 
 	len = ntohs(*(uint16_t *) (buf + 2));
-//	r = socket_index | (r_id << RADIUS_SHIFT);
-	r = RAD_RID(r_id,socket_index); // ekl
-
+	//r = socket_index | (r_id << RADIUS_SHIFT);
+	r = releaseRadiusID(r_id);	// EKL
 	s = radius[r].session;
 	LOG(3, s, session[s].tunnel, "Received %s, RADIUS %d response for session %u (%s, id %d)\n",
 			radius_state(radius[r].state), r, s, radius_code(r_code), r_id);
+
 	if (!s && radius[r].state != RADIUSSTOP)
 	{
 		LOG(1, s, session[s].tunnel, "   Unexpected RADIUS response\n");

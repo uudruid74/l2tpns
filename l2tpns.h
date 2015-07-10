@@ -29,14 +29,10 @@
 // Tunnel Id reserved for pppoe
 #define TUNNEL_ID_PPPOE	1
 
-// Modified to give 2 bits to the retry number
-#define RADIUS_SHIFT	8
-#define RADIUS_FDS	(1 << (RADIUS_SHIFT-2))
+#define RADIUS_SHIFT	6
+#define RADIUS_FDS	(1 << RADIUS_SHIFT)
 #define RADIUS_MASK	((1 << RADIUS_SHIFT) - 1)
-#define MAXRADIUS	(1 << (6 + RADIUS_SHIFT))
-#define RAD_ID(x)	((x & 0xFC00) >> (RADIUS_SHIFT+2))
-#define RAD_SOCK(x)	(((x) & RADIUS_MASK) & 0xFF)
-#define RAD_RID(responseid,socket)	((socket)|(((responseid) & 0xFC) << (RADIUS_SHIFT)))
+#define MAXRADIUS	(1 << (8 + RADIUS_SHIFT))
 
 #define T_UNDEF		(0xffff)	// A tunnel ID that won't ever be used. Mark session as undefined.
 #define T_FREE		(0)		// A tunnel ID that won't ever be used. Mark session as free.
